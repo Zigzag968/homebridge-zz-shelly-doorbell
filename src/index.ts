@@ -178,8 +178,8 @@ class ShellyDoorbellAccessory {
       .setCharacteristic(Characteristic.SerialNumber, config.host);
 
     // Service de sonnette (Stateless Programmable Switch)
-    this.doorbellService =
-      accessory.getService('Doorbell') || accessory.addService(Service.StatelessProgrammableSwitch, 'Doorbell', 'doorbell');
+    this.doorbellService = accessory.getService(Service.Doorbell) ||
+      accessory.addService(Service.Doorbell, "Doorbell", "doorbell");
 
     // Bouton de test pour simuler la sonnette
     this.testButtonService =
@@ -203,7 +203,7 @@ class ShellyDoorbellAccessory {
   public triggerDoorbell(): void {
     const { Characteristic } = this.platform.api.hap;
     this.platform.log.info(`Déclenchement de la sonnette pour ${this.config.host}`);
-    this.doorbellService.updateCharacteristic(Characteristic.ProgrammableSwitchEvent, 0);
+    this.doorbellService.updateCharacteristic(Characteristic.ProgrammableSwitchEvent, Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
   }
 
   /**
