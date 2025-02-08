@@ -5,7 +5,8 @@ import {
   PlatformAccessory,
   PlatformConfig,
   Service,
-  Characteristic,
+  CharacteristicValue,
+  HAP
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
@@ -14,8 +15,8 @@ import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
 /**
  * Point d'entrée du plugin.
  */
-export = (api: API) => {
-  api.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, ShellyDoorbellPlatform, true);
+module.exports = (homebridge: API) => {
+  homebridge.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, ShellyDoorbellPlatform);
 };
 
 //
@@ -184,7 +185,7 @@ class ShellyDoorbellAccessory {
     this.testButtonService =
       accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'testDoorbell');
     this.testButtonService.getCharacteristic(Characteristic.On)
-      .onSet(this.handleTestButton.bind(this))
+      .onSet((value: CharacteristicValue) => this.handleTestButton(value as boolean))
       .onGet(() => false);
 
     // Bouton pour ouvrir la porte
@@ -211,7 +212,7 @@ class ShellyDoorbellAccessory {
    * puis on remet le bouton à OFF après 1 seconde.
    */
   private async handleTestButton(value: boolean): Promise<void> {
-    if (value) {
+    if (value as boolean) {
       this.platform.log.info(`Test Doorbell activé pour ${this.config.host}`);
       this.triggerDoorbell();
       setTimeout(() => {
@@ -226,7 +227,7 @@ class ShellyDoorbellAccessory {
    * Shelly, via sa configuration, désactive automatiquement la commande, et le plugin
    * attend un webhook pour mettre à jour l’état du bouton.
    */
-  private async handleOpenDoor(value: boolean): Promise<void> {
+  private async handleOpenDoor(value: CharacteristicValue): Promise<void> {
     if (value) {
       this.platform.log.info(`Commande "Ouvrir la Porte" demandée via HomeKit pour ${this.config.host}`);
       const url = `http://${this.config.host}/rpc/Relay.Set?channel=0&state=on`;
