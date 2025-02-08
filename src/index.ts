@@ -179,18 +179,18 @@ class ShellyDoorbellAccessory {
 
     // Service de sonnette (Stateless Programmable Switch)
     this.doorbellService = accessory.getService(Service.Doorbell) ||
-      accessory.addService(Service.Doorbell, "Doorbell", "doorbell");
+      accessory.addService(Service.Doorbell, "Doorbell", "doorbellService");
 
     // Bouton de test pour simuler la sonnette
     this.testButtonService =
-      accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'testDoorbell');
+      accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
     this.testButtonService.getCharacteristic(Characteristic.On)
       .onSet((value: CharacteristicValue) => this.handleTestButton(value as boolean))
       .onGet(() => false);
 
     // Bouton pour ouvrir la porte
     this.openDoorService = accessory.getService(Service.LockMechanism) ||
-    accessory.addService(Service.LockMechanism, "Door Lock", "openDoor");
+    accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
     
     this.openDoorService.getCharacteristic(Characteristic.LockTargetState)
     .onSet(this.handleLockTargetState.bind(this))
