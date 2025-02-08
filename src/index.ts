@@ -16,7 +16,7 @@ import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
  * Point d'entrée du plugin.
  */
 module.exports = (homebridge: API) => {
-  homebridge.registerPlatform(PLUGIN_NAME, PLATFORM_NAME, ShellyDoorbellPlatform);
+  homebridge.registerPlatform(PLATFORM_NAME, ShellyDoorbellPlatform);
 };
 
 //
