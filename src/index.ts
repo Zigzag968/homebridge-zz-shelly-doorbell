@@ -230,7 +230,7 @@ class ShellyDoorbellAccessory {
   private async handleOpenDoor(value: CharacteristicValue): Promise<void> {
     if (value) {
       this.platform.log.info(`Commande "Ouvrir la Porte" demandée via HomeKit pour ${this.config.host}`);
-      const url = `http://${this.config.host}/rpc/Relay.Set?channel=0&state=on`;
+      const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
       this.sendHttpCommand(url, (err) => {
         if (err) {
           this.platform.log.error(`Erreur lors de l’envoi de la commande openDoor à ${this.config.host} : ${err.message}`);
