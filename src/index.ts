@@ -5,8 +5,8 @@ import {
   PlatformAccessory,
   PlatformConfig,
   Service,
-  CharacteristicValue,
-  HAP
+  Characteristic,
+  CharacteristicValue
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
@@ -189,11 +189,12 @@ class ShellyDoorbellAccessory {
       .onGet(() => false);
 
     // Bouton pour ouvrir la porte
-    this.openDoorService =
-      accessory.getService('Ouvrir la Porte') || accessory.addService(Service.Switch, 'Ouvrir la Porte', 'openDoor');
-    this.openDoorService.getCharacteristic(Characteristic.On)
-      .onSet(this.handleOpenDoor.bind(this))
-      .onGet(() => this.currentOpenDoorState);
+    this.openDoorService = accessory.getService(Service.LockMechanism) ||
+    accessory.addService(Service.LockMechanism, "Door Lock", "openDoor");
+    
+    this.openDoorService.getCharacteristic(Characteristic.LockTargetState)
+    .onSet(this.handleLockTargetState.bind(this))
+    .onGet(this.getLockCurrentState.bind(this));
   }
 
   /**
@@ -222,28 +223,48 @@ class ShellyDoorbellAccessory {
   }
 
   /**
-   * Handler pour le bouton Open Door activé depuis HomeKit.
-   * Lorsque l’utilisateur active le bouton, on envoie une commande RPC à Shelly.
-   * Shelly, via sa configuration, désactive automatiquement la commande, et le plugin
-   * attend un webhook pour mettre à jour l’état du bouton.
-   */
-  private async handleOpenDoor(value: CharacteristicValue): Promise<void> {
-    if (value) {
-      this.platform.log.info(`Commande "Ouvrir la Porte" demandée via HomeKit pour ${this.config.host}`);
+ * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
+ */
+private async handleLockTargetState(value: number): Promise<void> {
+  if (value === Characteristic.LockTargetState.UNSECURED) {
+      this.platform.log.info(`Commande de déverrouillage envoyée pour ${this.config.host}`);
       const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
       this.sendHttpCommand(url, (err) => {
-        if (err) {
-          this.platform.log.error(`Erreur lors de l’envoi de la commande openDoor à ${this.config.host} : ${err.message}`);
-          // En cas d’erreur, on remet le bouton à OFF
-          this.updateOpenDoorState(false);
-        } else {
-          this.platform.log.info(`Commande openDoor envoyée à ${this.config.host}`);
-          // On met à jour l’état en ON (l’actualisation finale se fera via le webhook de Shelly)
-          this.updateOpenDoorState(true);
-        }
+          if (err) {
+              this.platform.log.error(`Erreur lors de la commande d'ouverture : ${err.message}`);
+          } else {
+              this.platform.log.info(`Porte déverrouillée`);
+              this.updateLockState(true); // Simule que la porte est ouverte
+          }
       });
-    }
+  } else {
+      this.platform.log.info(`Commande de verrouillage reçue, mais action non supportée`);
   }
+}
+
+/**
+* Renvoie l'état actuel de la serrure (verrouillé/déverrouillé).
+*/
+private getLockCurrentState(): number {
+  return this.currentOpenDoorState
+      ? Characteristic.LockCurrentState.UNSECURED
+      : Characteristic.LockCurrentState.SECURED;
+}
+
+/**
+* Met à jour l'état de la serrure dans HomeKit.
+*/
+public updateLockState(isUnlocked: boolean): void {
+  this.currentOpenDoorState = isUnlocked;
+  this.openDoorService.updateCharacteristic(Characteristic.LockCurrentState, isUnlocked
+      ? Characteristic.LockCurrentState.UNSECURED
+      : Characteristic.LockCurrentState.SECURED
+  );
+  this.openDoorService.updateCharacteristic(Characteristic.LockTargetState, isUnlocked
+      ? Characteristic.LockTargetState.UNSECURED
+      : Characteristic.LockTargetState.SECURED
+  );
+}
 
   /**
    * Met à jour l’état du bouton "Ouvrir la Porte" dans HomeKit.
