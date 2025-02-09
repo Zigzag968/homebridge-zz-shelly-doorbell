@@ -360,9 +360,6 @@ class DummyCameraAccessory {
     // Affecter la catégorie CAMERA (ici 26 si hap.Categories n'est pas défini)
     accessory.category = 26;
 
-    // Définir le chemin de l'image factice (relatif à votre projet)
-    const fakeStreetImagePath = "media/static.jpg"; // À adapter selon votre structure
-
     // Créer l'instance du délégué FFmpeg en passant undefined pour le CameraController
     const ffmpegDelegate = new UnifiedFfmpegDelegate(
       this.platform.log,
