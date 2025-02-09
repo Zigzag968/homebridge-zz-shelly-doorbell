@@ -364,9 +364,8 @@ class DummyCameraAccessory {
     // Créer l'instance du délégué FFmpeg en passant undefined pour le CameraController
     const ffmpegDelegate = new UnifiedFfmpegDelegate(
       this.platform.log,
-      localSnapshotPath,
-      localStreamPath,
-      ['-i', fakeStreamPath],
+      fakeStreetImagePath,
+      fakeStreamPath,
       accessory.displayName,
       hap
     );
