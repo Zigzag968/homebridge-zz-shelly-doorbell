@@ -13,122 +13,51 @@ import { spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
 import { pickPort, Type } from 'pick-port';
 
-
+//
+// Interfaces pour stocker les informations de session
+//
 interface SessionInfo {
-  address: string // address of the HAP controller
-  ipv6: boolean
-  sessionID: string
-  videoPort: number
-  videoReturnPort: number
-  videoSRTP: Buffer // key and salt concatenated
-  videoSSRC: number // rtp synchronisation source
-  audioPort: number
-  audioReturnPort: number
-  audioSRTP: Buffer
-  audioSSRC: number
+  address: string;         // Adresse du contrôleur HAP
+  ipv6: boolean;
+  sessionID: string;
+  videoPort: number;
+  videoReturnPort: number;
+  videoSRTP: Buffer;       // Clé et salt concaténés pour la vidéo
+  videoSSRC: number;       // Identifiant de synchronisation RTP pour la vidéo
+  audioPort: number;
+  audioReturnPort: number;
+  audioSRTP: Buffer;
+  audioSSRC: number;
 }
 
 interface ActiveSession {
   socket?: Socket;
-  mainProcess?: any; // FfmpegProcess ou spawn('ffmpeg', ...)
-  returnProcess?: any; // si vous avez un second process pour le retour audio
+  mainProcess?: any;       // Processus FFmpeg lancé pour le flux
+  returnProcess?: any;     // Pour le retour audio, si nécessaire
   timeout?: NodeJS.Timeout;
 }
 
+//
+// Delegate utilisant FFmpeg pour générer un snapshot et un stream
+//
 export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
 
-  // Dans le vrai code, ces maps contiennent les sessions en cours
+  // Ces maps gèrent les sessions en attente et en cours.
   private pendingSessions: Map<string, SessionInfo> = new Map();
   private ongoingSessions: Map<string, ActiveSession> = new Map();
 
   constructor(
     private readonly log: Logger,
-    private readonly source: string,
+    private readonly source: string,   // Par exemple: "-i /path/to/fakeStreetImage.jpg" ou juste "/path/to/fakeStreetImage.jpg"
     private readonly cameraName: string,
     private readonly hap: HAP,
   ) {
-    this.hap = hap;
-  }
-
-  /**
-   * Méthode commune qui lance un job FFmpeg : soit un snapshot (isSnapshot = true), soit un flux vidéo continu.
-   * - Pour un snapshot : on capture 1 image en MJPEG et on renvoie le Buffer
-   * - Pour un flux : on transmet en RTP(SRT), selon les infos du sessionInfo
-   */
-  private startFfmpegJob(
-    sessionInfo: SessionInfo | null,
-    isSnapshot: boolean,
-    request: StartStreamRequest | undefined,
-    callback: StreamRequestCallback
-  ) {
-    // --- Construction de la ligne de commande FFmpeg ---
-
-    // On part d'une source ; par ex. 'color=c=red:s=640x480:d=1' pour tester un flux rouge
-    // ou du code similaire à votre "this.videoConfig.source"
-    let ffmpegArgs = '';
-
-    if (!isSnapshot && sessionInfo) {
-      // C'est un flux vidéo : on reprend la logique de votre code pour dimension, bitrate, etc.
-      // On suppose que request n'est pas undefined ici.
-      const mtu = 1316;
-      // Récupération d'infos ex. FPS/bitrate
-      const fps = request!.video.fps;
-      const videoBitrate = request!.video.max_bit_rate;
-      // Construction simplifiée (vous pouvez copier la logique de vcodec, mapvideo, ssrc, etc.)
-      ffmpegArgs = `-re -loop 1 ${this.source}`;  // Affichage de l'image en tant que vidéo
-      // Ajout d'options vidéo
-      ffmpegArgs += ` -an -sn -dn`;  // pas d'audio, sous-titre, data
-      ffmpegArgs += ` -codec:v libx264 -pix_fmt yuv420p -r ${fps} -b:v ${videoBitrate}k`;
-      ffmpegArgs += ` -f rawvideo`;
-      // Paramètres RTP
-      ffmpegArgs += ` -ssrc ${sessionInfo.videoSSRC} -f rtp -srtp_out_suite AES_CM_128_HMAC_SHA1_80`;
-      ffmpegArgs += ` -srtp_out_params ${sessionInfo.videoSRTP.toString('base64')}`;
-      ffmpegArgs += ` srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`;
-      ffmpegArgs += ` -loglevel level+verbose`;
-    } else {
-      ffmpegArgs = `${this.source} -frames:v 1 -f mjpeg -hide_banner -loglevel error -`;
-    }
-
-    this.log.info(`Lancement FFmpeg [${isSnapshot ? 'SNAPSHOT' : 'STREAM'}]: ffmpeg ${ffmpegArgs}`);
-
-    // --- Lancement du processus FFmpeg ---
-
-    const ffmpegProcess = spawn('ffmpeg', ffmpegArgs.split(' '), { env: process.env });
-    let snapshotBuffer = Buffer.alloc(0);
-
-    // Si c'est un snapshot, on recueille la sortie sur stdout
-    if (isSnapshot) {
-      ffmpegProcess.stdout.on('data', (data) => {
-        snapshotBuffer = Buffer.concat([snapshotBuffer, data]);
-      });
-    }
-
-    ffmpegProcess.on('error', (error: Error) => {
-      this.log.error(`FFmpeg process creation failed: ${error.message}`);
-      callback(error);
-    });
-
-    ffmpegProcess.on('close', () => {
-      this.log.info(`FFmpeg [${isSnapshot ? 'SNAPSHOT' : 'STREAM'}] terminé`);
-      if (isSnapshot) {
-        if (snapshotBuffer.length > 0) {
-          callback(undefined);
-        } else {
-          callback(new Error('Snapshot buffer vide.'));
-        }
-      } else {
-        // Pour un flux, on ne renvoie pas de Buffer à HomeKit ; on signale juste que c'est ok
-        // callback() doit être appelé dans startStream si tout se passe bien
-      }
-    });
-
-    return ffmpegProcess;
+    // Rien de particulier ici.
   }
 
   // ---------------------------------------------------
-  // Méthodes standard du CameraStreamingDelegate
+  // 1) PREPARE STREAM
   // ---------------------------------------------------
-
   async prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback): Promise<void> {
     this.log.info(`[${this.cameraName}] prepareStream: sessionID = ${request.sessionID}`);
 
@@ -136,13 +65,13 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
       type: "udp" as Type,
       ip: request.addressVersion === 'ipv6' ? '::' : '0.0.0.0',
       reserveTimeout: 15,
-    }
+    };
     const videoReturnPort = await pickPort(options);
     const videoSSRC = this.hap.CameraController.generateSynchronisationSource();
     const audioReturnPort = await pickPort(options);
     const audioSSRC = this.hap.CameraController.generateSynchronisationSource();
 
-    // Création d'un SessionInfo
+    // Création de l'objet SessionInfo
     const sessionInfo: SessionInfo = {
       sessionID: request.sessionID,
       address: request.targetAddress,
@@ -157,12 +86,8 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
       audioSSRC: audioSSRC,
     };
 
-    // Stockage de la session dans pendingSessions
     this.pendingSessions.set(request.sessionID, sessionInfo);
 
-    // Réponse à HomeKit : on renvoie la configuration qu'on "accepte" (ex. : video & audio)
-    // La plus grande partie des infos se trouve déjà dans 'request',
-    // mais vous pouvez ajouter ou modifier des champs si nécessaire.
     const response = {
       video: {
         port: request.video.port,
@@ -178,52 +103,53 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
       },
     };
 
-    this.log.info(`[${this.cameraName}] prepareStream: renvoi de la réponse à HomeKit`);
+    this.log.info(`[${this.cameraName}] prepareStream: réponse renvoyée à HomeKit`);
     callback(undefined, response);
   }
 
-  /**
-   * 1) handleSnapshotRequest : on récupère ou génère 1 frame
-   */
+  // ---------------------------------------------------
+  // 2) HANDLE SNAPSHOT REQUEST
+  // ---------------------------------------------------
   handleSnapshotRequest(request: any, callback: (error: Error | undefined, snapshot?: Buffer) => void): void {
-    this.log.info(`[${this.cameraName}] handleSnapshotRequest : on va lancer FFmpeg en mode snapshot`);
-    // On va créer un "fake" sessionInfo ou minimal
-    const snapshotSession: SessionInfo = {
-      sessionID: 'snapshotSession',
-      address: '127.0.0.1',
-      ipv6: false,
-      videoPort: 0,
-      videoReturnPort: 0,
-      videoSRTP: Buffer.alloc(0),
-      videoSSRC: 12345,
-      audioPort: 0,
-      audioReturnPort: 0,
-      audioSRTP: Buffer.alloc(0),
-      audioSSRC: 0
-    };
-    // On appelle la méthode commune en mode snapshot (isSnapshot = true)
-    // Le callback doit être de type StreamRequestCallback => on va adapter
-    // Pour un snapshot, c'est un callback(Error|null, Buffer?)
-    this.startFfmpegJob(snapshotSession, true, undefined, (err: Error | undefined, data?: Buffer) => {
-      if (err) {
-      callback(err);
+    this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement de FFmpeg en mode snapshot`);
+    // Construction des arguments FFmpeg pour capturer une image unique.
+    // On suppose que "this.source" contient le chemin ou l'option FFmpeg d'entrée.
+    const ffmpegArgs = `${this.source} -frames:v 1 -f mjpeg -hide_banner -loglevel error -`;
+    this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
+
+    const args = ffmpegArgs.split(' ');
+    const ffmpegProc = spawn('ffmpeg', args, { env: process.env });
+    let snapshotBuffer = Buffer.alloc(0);
+
+    ffmpegProc.stdout.on('data', (data) => {
+      snapshotBuffer = Buffer.concat([snapshotBuffer, data]);
+    });
+
+    ffmpegProc.on('error', (error: Error) => {
+      this.log.error(`[${this.cameraName}] FFmpeg snapshot error: ${error.message}`);
+      callback(error);
+    });
+
+    ffmpegProc.on('close', () => {
+      this.log.info(`[${this.cameraName}] FFmpeg snapshot terminé`);
+      if (snapshotBuffer.length > 0) {
+        callback(undefined, snapshotBuffer);
       } else {
-      // data est un Buffer (noté "snapshot" dans l'interface)
-      callback(undefined, data);
+        callback(new Error('Snapshot buffer vide.'));
       }
     });
   }
 
-  /**
-   * 2) handleStreamRequest : démarre / arrête / reconfigure un flux vidéo
-   */
+  // ---------------------------------------------------
+  // 3) HANDLE STREAM REQUEST
+  // ---------------------------------------------------
   handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback): void {
     switch (request.type) {
       case StreamRequestTypes.START:
         this.startStream(request as StartStreamRequest, callback);
         break;
       case StreamRequestTypes.RECONFIGURE:
-        this.log.info(`Reconfigure request ignorée pour l’instant.`);
+        this.log.info(`[${this.cameraName}] Reconfigure request ignorée.`);
         callback();
         break;
       case StreamRequestTypes.STOP:
@@ -233,46 +159,66 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     }
   }
 
+  // Méthode pour démarrer un flux vidéo continu
   private startStream(request: StartStreamRequest, callback: StreamRequestCallback): void {
-    // On récupère sessionInfo depuis pendingSessions (dans votre code complet)
     const sessionInfo = this.pendingSessions.get(request.sessionID);
     if (!sessionInfo) {
-      this.log.error(`Impossible de trouver la session ${request.sessionID}`);
+      this.log.error(`[${this.cameraName}] SessionInfo introuvable pour sessionID ${request.sessionID}`);
       callback(new Error('Session introuvable'));
       return;
     }
 
-    this.log.info(`[${this.cameraName}] startStream : on va lancer FFmpeg en mode flux`);
-    // Lancement du job FFmpeg en mode flux (isSnapshot = false)
-    const ffmpegProc = this.startFfmpegJob(sessionInfo, false, request, (err: Error | undefined, _data?: Buffer) => {
-      if (err) {
-        this.log.error(`Erreur lors du lancement du flux : ${err.message}`);
-        callback(err);
-      } else {
-        this.log.info(`Flux démarré avec succès (sessionID = ${request.sessionID}).`);
-        callback(); // signale à HomeKit que le flux est lancé
-      }
+    this.log.info(`[${this.cameraName}] startStream: lancement de FFmpeg en mode flux pour sessionID = ${request.sessionID}`);
+    // Exemple : Utiliser la source en mode stream en boucle (-loop 1) pour simuler un flux continu
+    const mtu = 1316;
+    const fps = request.video.fps;
+    const videoBitrate = request.video.max_bit_rate;
+    let ffmpegArgs = `-re -loop 1 ${this.source}`;
+    ffmpegArgs += ` -an -sn -dn`;
+    ffmpegArgs += ` -codec:v libx264 -pix_fmt yuv420p -r ${fps} -b:v ${videoBitrate}k`;
+    ffmpegArgs += ` -f rawvideo`;
+    ffmpegArgs += ` -ssrc ${sessionInfo.videoSSRC} -f rtp -srtp_out_suite AES_CM_128_HMAC_SHA1_80`;
+    ffmpegArgs += ` -srtp_out_params ${sessionInfo.videoSRTP.toString('base64')}`;
+    ffmpegArgs += ` srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`;
+    ffmpegArgs += ` -loglevel level+verbose`;
+
+    this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${ffmpegArgs}`);
+    const args = ffmpegArgs.split(' ');
+    const ffmpegProc = spawn('ffmpeg', args, { env: process.env });
+
+    ffmpegProc.on('error', (err: Error) => {
+      this.log.error(`[${this.cameraName}] FFmpeg stream error: ${err.message}`);
+      callback(err);
     });
 
-    // Exemple minimal de gestion de socket pour RTCP
-    const activeSession: ActiveSession = {};
-    activeSession.mainProcess = ffmpegProc;
-    activeSession.socket = createSocket(sessionInfo.ipv6 ? 'udp6' : 'udp4');
-  //  activeSession.socket.bind(sessionInfo.videoReturnPort);
-    this.ongoingSessions.set(request.sessionID, activeSession);
+    ffmpegProc.on('close', (code, signal) => {
+      this.log.info(`[${this.cameraName}] FFmpeg stream terminé (code=${code}, signal=${signal})`);
+      this.stopStream(request.sessionID);
+    });
 
+    // Création d'une session active
+    const activeSession: ActiveSession = { mainProcess: ffmpegProc };
+    // Optionnel : configuration d'une socket pour surveiller le RTCP, si nécessaire
+    // activeSession.socket = createSocket(sessionInfo.ipv6 ? 'udp6' : 'udp4');
+    // activeSession.socket.bind(sessionInfo.videoReturnPort);
+
+    this.ongoingSessions.set(request.sessionID, activeSession);
     this.pendingSessions.delete(request.sessionID);
+
+    // Signaler à HomeKit que le flux est lancé
+    callback();
   }
 
+  // Méthode pour arrêter le flux
   private stopStream(sessionID: string): void {
     const session = this.ongoingSessions.get(sessionID);
     if (session) {
       if (session.mainProcess) {
-        this.log.info(`Arrêt du process FFmpeg pour sessionID = ${sessionID}`);
+        this.log.info(`[${this.cameraName}] Arrêt du process FFmpeg pour sessionID = ${sessionID}`);
         try {
           session.mainProcess.kill('SIGKILL');
         } catch (err) {
-          this.log.error(`Erreur en killant FFmpeg : ${err}`);
+          this.log.error(`[${this.cameraName}] Erreur lors de l'arrêt de FFmpeg: ${err}`);
         }
       }
       if (session.socket) {
