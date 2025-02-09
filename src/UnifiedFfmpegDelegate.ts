@@ -43,7 +43,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
 
   constructor(
     private readonly log: Logger,
-    private readonly videoConfig: any,  // vous pouvez typifier selon vos besoins
+    private readonly source: string,
     private readonly cameraName: string,
     private readonly hap: HAP,
   ) {
@@ -56,7 +56,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
    * - Pour un flux : on transmet en RTP(SRT), selon les infos du sessionInfo
    */
   private startFfmpegJob(
-    sessionInfo: SessionInfo,
+    sessionInfo: SessionInfo | null,
     isSnapshot: boolean,
     request: StartStreamRequest | undefined,
     callback: StreamRequestCallback
@@ -67,28 +67,26 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     // ou du code similaire à votre "this.videoConfig.source"
     let ffmpegArgs = '';
 
-    if (isSnapshot) {
-      // On veut juste 1 frame en MJPEG
-      // Exemple minimal :
-      ffmpegArgs = `-f lavfi -i color=c=red:s=640x480:d=1 -frames:v 1 -f mjpeg -hide_banner -loglevel error -`;
-    } else {
+    if (!isSnapshot && sessionInfo) {
       // C'est un flux vidéo : on reprend la logique de votre code pour dimension, bitrate, etc.
       // On suppose que request n'est pas undefined ici.
-      const mtu = this.videoConfig.packetSize || 1316;
+      const mtu = 1316;
       // Récupération d'infos ex. FPS/bitrate
       const fps = request!.video.fps;
       const videoBitrate = request!.video.max_bit_rate;
       // Construction simplifiée (vous pouvez copier la logique de vcodec, mapvideo, ssrc, etc.)
-      ffmpegArgs = this.videoConfig.source!;  // ex. '-re -i ...'
+      ffmpegArgs = `-re -loop 1 ${this.source}`;  // Affichage de l'image en tant que vidéo
       // Ajout d'options vidéo
       ffmpegArgs += ` -an -sn -dn`;  // pas d'audio, sous-titre, data
       ffmpegArgs += ` -codec:v libx264 -pix_fmt yuv420p -r ${fps} -b:v ${videoBitrate}k`;
       ffmpegArgs += ` -f rawvideo`;
       // Paramètres RTP
-      //ffmpegArgs += ` -ssrc ${sessionInfo.videoSSRC} -f rtp -srtp_out_suite AES_CM_128_HMAC_SHA1_80`;
+      ffmpegArgs += ` -ssrc ${sessionInfo.videoSSRC} -f rtp -srtp_out_suite AES_CM_128_HMAC_SHA1_80`;
       ffmpegArgs += ` -srtp_out_params ${sessionInfo.videoSRTP.toString('base64')}`;
       ffmpegArgs += ` srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`;
       ffmpegArgs += ` -loglevel level+verbose`;
+    } else {
+      ffmpegArgs = `${this.source} -frames:v 1 -f mjpeg -hide_banner -loglevel error -`;
     }
 
     this.log.info(`Lancement FFmpeg [${isSnapshot ? 'SNAPSHOT' : 'STREAM'}]: ffmpeg ${ffmpegArgs}`);
@@ -104,12 +102,6 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
         snapshotBuffer = Buffer.concat([snapshotBuffer, data]);
       });
     }
-
-    ffmpegProcess.stderr.on('data', (data) => {
-      if (this.videoConfig.debug) {
-        this.log.debug(`FFmpeg stderr: ${data.toString()}`);
-      }
-    });
 
     ffmpegProcess.on('error', (error: Error) => {
       this.log.error(`FFmpeg process creation failed: ${error.message}`);
