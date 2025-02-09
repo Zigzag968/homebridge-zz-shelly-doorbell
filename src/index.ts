@@ -351,11 +351,30 @@ class DummyCameraAccessory {
     // Par exemple, si hap.Categories n'est pas défini, on peut utiliser 26.
     accessory.category = 26;
 
+    function readFileWithTimeout(filePath: string, timeout: number): Promise<Buffer> {
+      return new Promise<Buffer>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error("Timeout lors de la lecture du fichier."));
+        }, timeout);
+    
+        fs.promises.readFile(filePath)
+          .then((data) => {
+            clearTimeout(timer);
+            resolve(data);
+          })
+          .catch((err) => {
+            clearTimeout(timer);
+            reject(err);
+          });
+      });
+    }
+
     // Implémenter le délégué de streaming qui retourne toujours la même image
     const streamingDelegate: CameraStreamingDelegate = {
       async handleSnapshotRequest(request: any) {
         try {
-          const data = await fs.promises.readFile(fakeStreetImagePath);
+          const data = await readFileWithTimeout(fakeStreetImagePath, 2000); // 2000 ms de timeout
+
             return data;
         } catch (err) {
           if (err instanceof Error) {
@@ -388,7 +407,7 @@ class DummyCameraAccessory {
          * Ici, nous renvoyons simplement l'image statique pour toute demande de flux.
          */
       async handleStreamRequest(request: any): Promise<Buffer> {
-        const data = await fs.promises.readFile(fakeStreetImagePath);
+        const data = await readFileWithTimeout(fakeStreetImagePath, 2000); // 2000 ms de timeout
         return data;
       }
     };
