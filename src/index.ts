@@ -16,14 +16,17 @@ import {
   PrepareStreamCallback,
   StreamingRequest,
   StreamRequestCallback,
+  CameraController,
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
 import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
+import { UnifiedFfmpegDelegate } from './UnifiedFfmpegDelegate';
 import * as path from 'path';
+import { spawn } from 'child_process';
 
-const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImagePath.jpg');
+const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
 
 let hap: HAP;
 
@@ -337,101 +340,62 @@ public updateLockState(isUnlocked: boolean): void {
     });
   }
 }
-
-
 class DummyCameraAccessory {
+  public cameraController?: CameraController;
+
   constructor(
     private readonly platform: ShellyDoorbellPlatform,
     private readonly accessory: PlatformAccessory,
   ) {
     const { Service, Characteristic, CameraController } = this.platform.api.hap;
 
-    // Configuration des informations de l'accessoire
-    const infoService = accessory.getService(Service.AccessoryInformation) || accessory.addService(Service.AccessoryInformation);
+    // Configuration du service AccessoryInformation
+    const infoService = accessory.getService(Service.AccessoryInformation) ||
+      accessory.addService(Service.AccessoryInformation);
     infoService
       .setCharacteristic(Characteristic.Manufacturer, "Dummy Camera")
       .setCharacteristic(Characteristic.Model, "Static Image Camera")
       .setCharacteristic(Characteristic.SerialNumber, "CAM-" + accessory.UUID);
 
-    // Affecter la catégorie CAMERA (généralement 26, ou utilisez hap.Categories.CAMERA si disponible)
-    // Par exemple, si hap.Categories n'est pas défini, on peut utiliser 26.
+    // Affecter la catégorie CAMERA (ici 26 si hap.Categories n'est pas défini)
     accessory.category = 26;
 
-    function readFileWithTimeout(filePath: string, timeout: number): Promise<Buffer> {
-      return new Promise<Buffer>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new Error("Timeout lors de la lecture du fichier."));
-        }, timeout);
-    
-        fs.promises.readFile(filePath)
-          .then((data) => {
-            clearTimeout(timer);
-            resolve(data);
-          })
-          .catch((err) => {
-            clearTimeout(timer);
-            reject(err);
-          });
-      });
-    }
+    // Définir le chemin de l'image factice (relatif à votre projet)
+    const fakeStreetImagePath = "media/static.jpg"; // À adapter selon votre structure
 
-    const redPixelJpegBase64 =
-  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAMEB//EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/aAAgBAQABBQL//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//9k=";
-    const redImageBuffer = Buffer.from(redPixelJpegBase64, 'base64');
-    // Implémenter le délégué de streaming qui retourne toujours la même image
-    const streamingDelegate: CameraStreamingDelegate = {
-      async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback) {
-        callback(undefined, redImageBuffer);
+    // Créer l'instance du délégué FFmpeg en passant undefined pour le CameraController
+    const ffmpegDelegate = new UnifiedFfmpegDelegate(
+      this.platform.log,
+      {
+        source: '-re -i ' + fakeStreetImagePath,
+        stillImageSource: fakeStreetImagePath,
       },
-        /**
-       * Prépare le flux. Ici, nous renvoyons simplement un objet "dummy" qui reprend certaines valeurs
-       * présentes dans la requête. Cette réponse n'est utilisée que pour la négociation du flux.
-       */
-      async prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback) {
-      // Log pour déboguer
-      console.info("DummyCameraAccessory: prepareStream appelée");
-      // Retourne une réponse dummy basée sur la requête
-      callback(undefined, {
-        video: {
-          ssrc: 1,
-          port: request.video.port,
-          srtp_key: request.video.srtp_key,
-          srtp_salt: request.video.srtp_salt
-        }
-      });
-      },
-      /**
-         * Gère la requête de flux.
-         * Ici, nous renvoyons simplement l'image statique pour toute demande de flux.
-         */
-      async handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback) {
-        callback(undefined);
-      }
-    };
+      accessory.displayName,
+      hap
+    );
 
-    // Définir les options du contrôleur caméra selon l'interface CameraControllerOptions
+    // Définir les options du CameraController
     const cameraControllerOptions: CameraControllerOptions = {
-      delegate: streamingDelegate,
+      delegate: ffmpegDelegate,
       streamingOptions: {
-      supportedCryptoSuites: [0],
-      video: {
-        resolutions: [
-        [640, 480, 15],
-        [320, 240, 15],
-        [1280, 720, 15]
-        ],
-        codec: {
-        profiles: [0, 1, 2],
-        levels: [0, 1, 2]
+        supportedCryptoSuites: [0],
+        video: {
+          resolutions: [
+            [640, 480, 15],
+            [320, 240, 15],
+            [1280, 720, 15]
+          ],
+          codec: {
+            profiles: [0, 1, 2],
+            levels: [0, 1, 2]
+          }
         }
-      }
       }
     };
 
-    // Créer le contrôleur caméra avec les options définies
-    const cameraController = new CameraController(cameraControllerOptions);
-
-    // Associer le contrôleur à l'accessoire
-    accessory.configureController(cameraController);
+    // Créer le CameraController avec les options définies
+    const cameraControllerInstance = new CameraController(cameraControllerOptions);
+    
+    accessory.configureController(cameraControllerInstance);
   }
 }
