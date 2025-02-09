@@ -10,6 +10,12 @@ import {
   HAP,
   CameraControllerOptions, 
   CameraStreamingDelegate,
+  SnapshotRequest,
+  SnapshotRequestCallback,
+  PrepareStreamRequest,
+  PrepareStreamCallback,
+  StreamingRequest,
+  StreamRequestCallback,
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
@@ -369,46 +375,37 @@ class DummyCameraAccessory {
       });
     }
 
+    const redPixelJpegBase64 =
+  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAMEB//EABYBAQEBAAAAAAAAAAAAAAAAAAABAv/aAAgBAQABBQL//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//9k=";
+    const redImageBuffer = Buffer.from(redPixelJpegBase64, 'base64');
     // Implémenter le délégué de streaming qui retourne toujours la même image
     const streamingDelegate: CameraStreamingDelegate = {
-      async handleSnapshotRequest(request: any) {
-        try {
-          const data = await readFileWithTimeout(fakeStreetImagePath, 2000); // 2000 ms de timeout
-
-            return data;
-        } catch (err) {
-          if (err instanceof Error) {
-            throw new Error("Erreur lors de la lecture de l'image statique: " + err.message);
-          } else {
-            throw new Error("Erreur lors de la lecture de l'image statique");
-          }
-        }
+      async handleSnapshotRequest(request: SnapshotRequest, callback: SnapshotRequestCallback) {
+        callback(undefined, redImageBuffer);
       },
         /**
        * Prépare le flux. Ici, nous renvoyons simplement un objet "dummy" qui reprend certaines valeurs
        * présentes dans la requête. Cette réponse n'est utilisée que pour la négociation du flux.
        */
-      async prepareStream(request: any): Promise<any> {
+      async prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback) {
       // Log pour déboguer
-      console.info("DummyCameraAccessory: prepareStream appelé avec", request);
+      console.info("DummyCameraAccessory: prepareStream appelée");
       // Retourne une réponse dummy basée sur la requête
-      return {
+      callback(undefined, {
         video: {
           ssrc: 1,
-          port: request.videoPort, // on utilise le port fourni dans la requête
-          srtp_key: request.srtp_key,
-          srtp_salt: request.srtp_salt
+          port: request.video.port,
+          srtp_key: request.video.srtp_key,
+          srtp_salt: request.video.srtp_salt
         }
-        // Vous pouvez ajouter la partie audio si nécessaire
-      };
+      });
       },
       /**
          * Gère la requête de flux.
          * Ici, nous renvoyons simplement l'image statique pour toute demande de flux.
          */
-      async handleStreamRequest(request: any): Promise<Buffer> {
-        const data = await readFileWithTimeout(fakeStreetImagePath, 2000); // 2000 ms de timeout
-        return data;
+      async handleStreamRequest(request: StreamingRequest, callback: StreamRequestCallback) {
+        callback(undefined);
       }
     };
 
