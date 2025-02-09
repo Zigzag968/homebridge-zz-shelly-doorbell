@@ -8,9 +8,12 @@ import {
   Characteristic,
   CharacteristicValue,
   HAP,
+  CameraController, 
+  CameraStreamingDelegate,
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
+import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
 
 let hap: HAP;
@@ -71,37 +74,54 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
    * Découverte des dispositifs définis dans la configuration.
    * La config peut être soit un objet unique, soit contenir un tableau "devices".
    */
-  discoverDevices(): void {
-    const devices = (this.config.devices && Array.isArray(this.config.devices))
+// Dans la classe ShellyDoorbellPlatform
+discoverDevices(): void {
+  const devices = (this.config.devices && Array.isArray(this.config.devices))
       ? this.config.devices
       : [this.config];
-    for (const deviceConfig of devices) {
-      if (!deviceConfig.host) {
-        this.log.error('La configuration d’un dispositif doit inclure la propriété "host".');
-        continue;
-      }
-      const uuid = this.api.hap.uuid.generate(deviceConfig.host);
-      let accessory = this.accessories.find(acc => acc.UUID === uuid);
-      if (accessory) {
-        this.log.info('Restauration de l’accessoire existant :', accessory.displayName);
-        accessory.context.device = deviceConfig;
-        
-  
-        const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
-        this.accessoryMap.set(deviceConfig.host, shellyAccessory);
-      } else {
-        this.log.info('Ajout d’un nouvel accessoire :', deviceConfig.name || deviceConfig.host);
-        accessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Doorbell', uuid);
-        
-  
-        accessory.context.device = deviceConfig;
-        const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
-        this.accessories.push(accessory);
-        this.accessoryMap.set(deviceConfig.host, shellyAccessory);
-        this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-      }
+  for (const deviceConfig of devices) {
+    if (!deviceConfig.host) {
+      this.log.error('La configuration d’un dispositif doit inclure la propriété "host".');
+      continue;
+    }
+
+    // --- Création de l'accessoire porte (serrure) ---
+    const lockUUID = this.api.hap.uuid.generate(deviceConfig.host);
+    let lockAccessory = this.accessories.find(acc => acc.UUID === lockUUID);
+    if (lockAccessory) {
+      this.log.info('Restauration de l’accessoire porte existant :', lockAccessory.displayName);
+      lockAccessory.context.device = deviceConfig;
+      // Optionnel : forcer la catégorie si besoin (ex. INTERCOM pour enrichir la notification)
+      // lockAccessory.category = INTERCOM_CATEGORY; // si vous en avez défini une
+      new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig);
+      this.accessoryMap.set(deviceConfig.host, new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig));
+    } else {
+      this.log.info('Ajout d’un nouvel accessoire porte :', deviceConfig.name || deviceConfig.host);
+      lockAccessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Door', lockUUID);
+      lockAccessory.context.device = deviceConfig;
+      new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig);
+      this.accessories.push(lockAccessory);
+      this.accessoryMap.set(deviceConfig.host, new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig));
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [lockAccessory]);
+    }
+
+    // --- Création de l'accessoire caméra dummy ---
+    const cameraUUID = this.api.hap.uuid.generate("camera-" + deviceConfig.host);
+    let cameraAccessory = this.accessories.find(acc => acc.UUID === cameraUUID);
+    if (cameraAccessory) {
+      this.log.info('Restauration de l’accessoire caméra existant :', cameraAccessory.displayName);
+      cameraAccessory.context.device = deviceConfig;
+      new DummyCameraAccessory(this, cameraAccessory);
+    } else {
+      this.log.info('Ajout d’un nouvel accessoire caméra pour', deviceConfig.host);
+      cameraAccessory = new this.api.platformAccessory(deviceConfig.name ? deviceConfig.name + " Camera" : "Dummy Camera", cameraUUID);
+      cameraAccessory.context.device = deviceConfig;
+      new DummyCameraAccessory(this, cameraAccessory);
+      this.accessories.push(cameraAccessory);
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [cameraAccessory]);
     }
   }
+}
 
   /**
    * Listener des requêtes HTTP entrantes (webhooks).
@@ -299,12 +319,74 @@ public updateLockState(isUnlocked: boolean): void {
    */
   private sendHttpCommand(url: string, callback: (err?: Error) => void): void {
     this.platform.log.debug(`Envoi d’une commande HTTP : ${url}`);
-    http.get(url, (res) => {
+    http.get(url, (res: any) => {
       // La réponse n’est pas traitée en détail ici
       res.on('data', () => {});
       res.on('end', () => callback());
-    }).on('error', (err) => {
+    }).on('error', (err: any) => {
       callback(err);
     });
+  }
+}
+
+
+class DummyCameraAccessory {
+  constructor(
+    private readonly platform: ShellyDoorbellPlatform,
+    private readonly accessory: PlatformAccessory,
+  ) {
+    const { Service, Characteristic, CameraController } = this.platform.api.hap;
+
+    // Configuration des informations de l'accessoire
+    const infoService = accessory.getService(Service.AccessoryInformation) || accessory.addService(Service.AccessoryInformation);
+    infoService
+      .setCharacteristic(Characteristic.Manufacturer, "Dummy Camera")
+      .setCharacteristic(Characteristic.Model, "Static Image Camera")
+      .setCharacteristic(Characteristic.SerialNumber, "CAM-" + accessory.UUID);
+
+    // Affecter la catégorie CAMERA (généralement 26, ou utilisez hap.Categories.CAMERA si disponible)
+    // Par exemple, si hap.Categories n'est pas défini, on peut utiliser 26.
+    accessory.category = 26;
+
+    // Implémenter le délégué de streaming qui retourne toujours la même image
+    const streamingDelegate: CameraStreamingDelegate = {
+      async handleSnapshotRequest(request: any) {
+        // Ici, on lit l'image statique depuis le fichier (assurez-vous que './static.jpg' existe)
+        try {
+          const data = await fs.promises.readFile('./media/static.jpg');
+          return data;
+        } catch (err) {
+          if (err instanceof Error) {
+            throw new Error("Erreur lors de la lecture de l'image statique: " + err.message);
+          } else {
+            throw new Error("Erreur lors de la lecture de l'image statique");
+          }
+        }
+      },
+      async prepareStream(_request: any) { throw new Error("Streaming non supporté"); },
+      async handleStreamRequest(_request: any) { throw new Error("Streaming non supporté"); },
+    };
+
+    // Configuration minimale pour le streaming (même si le streaming vidéo n'est pas supporté)
+    const cameraConfig: any = {
+      video: {
+        source: "", // Pas de flux vidéo réel
+        maxStreams: 1,
+        maxWidth: 1960,
+        maxHeight: 1080,
+        maxFPS: 15,
+        vcodec: "copy",
+        audio: {
+          enabled: false
+        }
+      }
+    };
+
+    // Créer le contrôleur caméra et l'associer à l'accessoire
+    const cameraController = new CameraController({
+      delegate: streamingDelegate,
+      streamingOptions: cameraConfig.video
+    });
+    accessory.configureController(cameraController);
   }
 }
