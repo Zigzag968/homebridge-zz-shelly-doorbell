@@ -60,7 +60,7 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
     this.log.info('Restauration d’un accessoire depuis le cache :', accessory.displayName);
     this.accessories.push(accessory);
     // Forcer la catégorie en INTERCOM pour que l'accessoire soit reconnu comme un interphone
-    accessory.category = hap.Accessory.Categories.INTERCOM;
+    accessory.category = hap.Categories.INTERCOM;
     const deviceConfig = accessory.context.device;
     if (deviceConfig && deviceConfig.host) {
       const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
@@ -87,14 +87,14 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
         this.log.info('Restauration de l’accessoire existant :', accessory.displayName);
         accessory.context.device = deviceConfig;
         // Forcer la catégorie en INTERCOM
-        accessory.category = hap.Accessory.Categories.INTERCOM;
+        accessory.category = hap.Categories.INTERCOM;
         const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
         this.accessoryMap.set(deviceConfig.host, shellyAccessory);
       } else {
         this.log.info('Ajout d’un nouvel accessoire :', deviceConfig.name || deviceConfig.host);
-        accessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Intercom', uuid);
+        accessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Doorbell', uuid);
         // Forcer la catégorie en INTERCOM
-        accessory.category = hap.Accessory.Categories.INTERCOM;
+        accessory.category = hap.Categories.INTERCOM;
         accessory.context.device = deviceConfig;
         const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
         this.accessories.push(accessory);
@@ -162,14 +162,14 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
 }
 
 //
-// Classe représentant un accessoire Shelly Intercom
+// Classe représentant un accessoire Shelly Doorbell
 //
 class ShellyDoorbellAccessory {
   private readonly informationService: Service;
-  private readonly intercomService: Service;     // Service utilisé pour l'intercom
-  private readonly testButtonService: Service;     // Bouton de test pour l'intercom
-  private readonly openDoorService: Service;       // Serrure pour ouvrir la porte
-  // État interne de la serrure
+  private readonly doorbellService: Service;     // Service Stateless Programmable Switch
+  private readonly testButtonService: Service;     // Bouton de test pour la sonnette
+  private readonly openDoorService: Service;       // Bouton pour ouvrir la porte
+  // On maintient en interne l’état du bouton "Ouvrir la Porte"
   private currentOpenDoorState: boolean = false;
 
   constructor(
@@ -183,107 +183,108 @@ class ShellyDoorbellAccessory {
     this.informationService =
       accessory.getService(Service.AccessoryInformation) || accessory.addService(Service.AccessoryInformation);
     this.informationService
-      .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
-      .setCharacteristic(Characteristic.Model, 'Shelly 1 Gen 3')
-      .setCharacteristic(Characteristic.SerialNumber, config.host);
+      .setCharacteristic(hap.Characteristic.Manufacturer, 'Shelly')
+      .setCharacteristic(hap.Characteristic.Model, 'Shelly 1 Gen 3')
+      .setCharacteristic(hap.Characteristic.SerialNumber, config.host);
 
-    // Service intercom (on utilise le service Doorbell renommé en "Intercom")
-    this.intercomService = accessory.getService(Service.Doorbell) ||
-      accessory.addService(Service.Doorbell, "Intercom", "intercomService");
+    // Service de sonnette (Stateless Programmable Switch)
+    this.doorbellService = accessory.getService(Service.Doorbell) ||
+      accessory.addService(Service.Doorbell, "Doorbell", "doorbellService");
 
-    // Bouton de test pour simuler l'intercom
+    // Bouton de test pour simuler la sonnette
     this.testButtonService =
-      accessory.getService('Test Intercom') || accessory.addService(Service.Switch, 'Test Intercom', 'intercomTest');
-    this.testButtonService.getCharacteristic(Characteristic.On)
+      accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
+    this.testButtonService.getCharacteristic(hap.Characteristic.On)
       .onSet((value: CharacteristicValue) => this.handleTestButton(value as boolean))
       .onGet(() => false);
 
-    // Serrure pour ouvrir la porte
+    // Bouton pour ouvrir la porte
     this.openDoorService = accessory.getService(Service.LockMechanism) ||
-      accessory.addService(Service.LockMechanism, "Serrure de Porte", "openDoor");
-    this.openDoorService.getCharacteristic(Characteristic.LockTargetState)
-      .onSet(this.handleLockTargetState.bind(this))
-      .onGet(this.getLockCurrentState.bind(this));
+    accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
+    
+    this.openDoorService.getCharacteristic(hap.Characteristic.LockTargetState)
+    .onSet(this.handleLockTargetState.bind(this))
+    .onGet(this.getLockCurrentState.bind(this));
   }
 
   /**
-   * Déclenche l’événement intercom dans HomeKit.
-   * La caractéristique ProgrammableSwitchEvent est mise à SINGLE_PRESS.
+   * Déclenche l’événement de sonnette (doorbell) dans HomeKit.
+   * La caractéristique ProgrammableSwitchEvent est mise à 0 (SINGLE PRESS).
    */
-  public triggerIntercom(): void {
+  public triggerDoorbell(): void {
     const { Characteristic } = this.platform.api.hap;
-    this.platform.log.info(`Déclenchement de l'intercom pour ${this.config.host}`);
-    this.intercomService.updateCharacteristic(Characteristic.ProgrammableSwitchEvent, Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
+    this.platform.log.info(`Déclenchement de la sonnette pour ${this.config.host}`);
+    this.doorbellService.updateCharacteristic(hap.Characteristic.ProgrammableSwitchEvent, hap.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
   }
 
   /**
-   * Handler pour le bouton Test Intercom activé depuis HomeKit.
-   * Lorsque l’utilisateur active le bouton, on simule un événement intercom,
+   * Handler pour le bouton Test Doorbell activé depuis HomeKit.
+   * Lorsque l’utilisateur active le bouton, on simule un événement de sonnette,
    * puis on remet le bouton à OFF après 1 seconde.
    */
   private async handleTestButton(value: boolean): Promise<void> {
-    if (value) {
-      this.platform.log.info(`Test Intercom activé pour ${this.config.host}`);
-      this.triggerIntercom();
+    if (value as boolean) {
+      this.platform.log.info(`Test Doorbell activé pour ${this.config.host}`);
+      this.triggerDoorbell();
       setTimeout(() => {
-        this.testButtonService.updateCharacteristic(this.platform.api.hap.hap.Characteristic.On, false);
+        this.testButtonService.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
       }, 1000);
     }
   }
 
   /**
-   * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
-   */
-  private async handleLockTargetState(value: number): Promise<void> {
-    if (value === hap.Characteristic.LockTargetState.UNSECURED) {
+ * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
+ */
+private async handleLockTargetState(value: number): Promise<void> {
+  if (value === hap.Characteristic.LockTargetState.UNSECURED) {
       this.platform.log.info(`Commande de déverrouillage envoyée pour ${this.config.host}`);
       const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
       this.sendHttpCommand(url, (err) => {
-        if (err) {
-          this.platform.log.error(`Erreur lors de la commande d'ouverture : ${err.message}`);
-        } else {
-          this.platform.log.info(`Porte déverrouillée`);
-          this.updateLockState(true);
-        }
+          if (err) {
+              this.platform.log.error(`Erreur lors de la commande d'ouverture : ${err.message}`);
+          } else {
+              this.platform.log.info(`Porte déverrouillée`);
+              this.updateLockState(true); // Simule que la porte est ouverte
+          }
       });
-    } else {
+  } else {
       this.platform.log.info(`Commande de verrouillage reçue, mais action non supportée`);
-    }
   }
+}
 
-  /**
-   * Renvoie l'état actuel de la serrure (verrouillé/déverrouillé).
-   */
-  private getLockCurrentState(): number {
-    return this.currentOpenDoorState
+/**
+* Renvoie l'état actuel de la serrure (verrouillé/déverrouillé).
+*/
+private getLockCurrentState(): number {
+  return this.currentOpenDoorState
       ? hap.Characteristic.LockCurrentState.UNSECURED
       : hap.Characteristic.LockCurrentState.SECURED;
-  }
+}
 
-  /**
-   * Met à jour l'état de la serrure dans HomeKit.
-   */
-  public updateLockState(isUnlocked: boolean): void {
-    this.currentOpenDoorState = isUnlocked;
-    this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, isUnlocked
+/**
+* Met à jour l'état de la serrure dans HomeKit.
+*/
+public updateLockState(isUnlocked: boolean): void {
+  this.currentOpenDoorState = isUnlocked;
+  this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, isUnlocked
       ? hap.Characteristic.LockCurrentState.UNSECURED
       : hap.Characteristic.LockCurrentState.SECURED
-    );
-    this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, isUnlocked
+  );
+  this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, isUnlocked
       ? hap.Characteristic.LockTargetState.UNSECURED
       : hap.Characteristic.LockTargetState.SECURED
-    );
-  }
+  );
+}
 
   /**
-   * (Optionnel) Met à jour l’état du bouton "Ouvrir la Porte" dans HomeKit.
+   * Met à jour l’état du bouton "Ouvrir la Porte" dans HomeKit.
    * Cet état est mis à jour soit suite à une commande envoyée, soit via un webhook reçu de Shelly.
    */
   public updateOpenDoorState(newState: boolean): void {
     if (this.currentOpenDoorState !== newState) {
       this.currentOpenDoorState = newState;
       this.platform.log.info(`Mise à jour de l’état "Ouvrir la Porte" pour ${this.config.host} : ${newState ? 'ON' : 'OFF'}`);
-      this.openDoorService.updateCharacteristic(this.platform.api.hap.hap.Characteristic.On, newState);
+      this.openDoorService.updateCharacteristic(this.platform.api.hap.Characteristic.On, newState);
     }
   }
 
@@ -293,6 +294,7 @@ class ShellyDoorbellAccessory {
   private sendHttpCommand(url: string, callback: (err?: Error) => void): void {
     this.platform.log.debug(`Envoi d’une commande HTTP : ${url}`);
     http.get(url, (res) => {
+      // La réponse n’est pas traitée en détail ici
       res.on('data', () => {});
       res.on('end', () => callback());
     }).on('error', (err) => {
