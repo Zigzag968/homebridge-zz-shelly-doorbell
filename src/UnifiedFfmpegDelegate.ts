@@ -186,25 +186,24 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     // Construction du tableau d'arguments pour FFmpeg
     const ffmpegArgsArray = [
       '-re',
-      '-r', `${fps}`,
-      '-stream_loop', '-1',                   // Boucler la vidéo indéfiniment
-      '-i', this.localStreamPath,                    // Option d'entrée
-      '-fflags', '+genpts',
-      '-an', '-sn', '-dn',                     // Pas d'audio, sous-titres, ou données
+      '-i', this.localStreamPath,
+      '-an', '-sn', '-dn',
       '-codec:v', 'libx264',
       '-profile:v', 'baseline',
-      '-preset', 'veryfast',
       '-tune', 'zerolatency',
-      '-pix_fmt', 'yuv420p',
-      '-color_range', `mpeg`,
+      '-preset', 'veryfast',
+      '-r', `${fps}`,
+      '-g', '30',
+      '-keyint_min', '30',
+      '-sc_threshold', '0',
       '-b:v', `${videoBitrate}k`,
+      '-maxrate', `${videoBitrate}k`,
+      '-bufsize', `${videoBitrate}k`,
+      '-pix_fmt', 'yuv420p',
+      '-payload_type', '99',
+      '-force_key_frames', 'expr:gte(t,n_forced*2)',
       '-f', 'rtp',
-      '-flush_packets', '1', 
-      '-payload_type', '96',
-      '-ssrc', `${sessionInfo.videoSSRC}`,
-      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
-      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
+      `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
       '-loglevel', 'level+verbose'
     ];
 
