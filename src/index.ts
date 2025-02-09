@@ -17,6 +17,8 @@ import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
 import * as path from 'path';
 
+const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImagePath.jpg');
+
 let hap: HAP;
 
 /**
@@ -352,10 +354,8 @@ class DummyCameraAccessory {
     // Implémenter le délégué de streaming qui retourne toujours la même image
     const streamingDelegate: CameraStreamingDelegate = {
       async handleSnapshotRequest(request: any) {
-        // Ici, on lit l'image statique depuis le fichier (assurez-vous que './static.jpg' existe)
         try {
-          const imagePath = path.join(process.cwd(), 'media', 'static.jpg');
-          const data = await fs.promises.readFile(imagePath);
+          const data = await fs.promises.readFile(fakeStreetImagePath);
             return data;
         } catch (err) {
           if (err instanceof Error) {
@@ -365,13 +365,30 @@ class DummyCameraAccessory {
           }
         }
       },
+        /**
+       * Prépare le flux. Ici, nous renvoyons simplement un objet "dummy" qui reprend certaines valeurs
+       * présentes dans la requête. Cette réponse n'est utilisée que pour la négociation du flux.
+       */
+      async prepareStream(request: any): Promise<any> {
+      // Log pour déboguer
+      console.info("DummyCameraAccessory: prepareStream appelé avec", request);
+      // Retourne une réponse dummy basée sur la requête
+      return {
+        video: {
+          ssrc: 1,
+          port: request.videoPort, // on utilise le port fourni dans la requête
+          srtp_key: request.srtp_key,
+          srtp_salt: request.srtp_salt
+        }
+        // Vous pouvez ajouter la partie audio si nécessaire
+      };
+      },
       /**
          * Gère la requête de flux.
          * Ici, nous renvoyons simplement l'image statique pour toute demande de flux.
          */
       async handleStreamRequest(request: any): Promise<Buffer> {
-        const imagePath = path.join(process.cwd(), 'media', 'static.jpg');
-        const data = await fs.promises.readFile(imagePath);
+        const data = await fs.promises.readFile(fakeStreetImagePath);
         return data;
       }
     };
