@@ -181,38 +181,36 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     const mtu = 1316;
     const fps = request.video.fps;
     const videoBitrate = request.video.max_bit_rate;
- 
-    const videoConfig = {
-      mapvideo: null,
-      encoderOptions: "",
-      resolution: {
-        width: request.video.width,
-        height: request.video.height,
-        videoFilter: ""
-      }
-    };
-    
-  let ffmpegArgsArray = [
-    ...this.source,
-    videoConfig.mapvideo ? `-map ${videoConfig.mapvideo}` : '-an -sn -dn',
-    '-codec:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-color_range', 'mpeg',
-    ...(fps > 0 ? ['-r', `${fps}`] : []),
-    '-f', 'rawvideo',
-    ...(videoConfig.encoderOptions ? videoConfig.encoderOptions.split(' ') : []),
-    ...(videoConfig.resolution.videoFilter ? ['-filter:v', videoConfig.resolution.videoFilter] : []),
-    ...(videoBitrate > 0 ? ['-b:v', `${videoBitrate}k`] : []),
-    '-payload_type', `${request.video.pt}`,
-    '-ssrc', `${sessionInfo.videoSSRC}`,
-    '-f', 'rtp',
-    '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-    '-srtp_out_params', `${sessionInfo.videoSRTP.toString('base64')}`,
-    `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
-  ];
+  
+    // Assurez-vous que la source inclut l'option d'entrée "-i"
+    let sourceArgs = ['-i', '/home/alexg/homebridge-zz-shelly-doorbell/dist/media/fakeStreetImage.jpg'];
+  
+    // Construction du tableau d'arguments pour FFmpeg pour un flux continu
+    const ffmpegArgsArray = [
+      '-re',
+      '-loop', '1',                   // Utiliser -loop 1 pour une image statique en boucle
+      ...sourceArgs,
+      '-fflags', '+genpts',
+      '-an',
+      '-sn',
+      '-dn',
+      '-codec:v', 'libx264',
+      '-preset', 'veryfast',
+      '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
+      '-color_range', 'tv',
+      '-r', `${fps}`,
+      '-b:v', `${videoBitrate}k`,
+      '-f', 'rtp',                    // Uniquement le format RTP
+      '-payload_type', '96',
+      '-ssrc', `${sessionInfo.videoSSRC}`,
+      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
+      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
+      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
+      '-loglevel', 'level+error'
+    ];
   
     this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${ffmpegArgsArray.join(' ')}`);
-    
     const ffmpegProc = spawn('ffmpeg', ffmpegArgsArray, { env: process.env });
   
     ffmpegProc.on('error', (err: Error) => {
@@ -229,12 +227,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
       this.stopStream(request.sessionID);
     });
   
-    // Création de la session active pour le flux
     const activeSession: ActiveSession = { mainProcess: ffmpegProc };
-    // Optionnel : si nécessaire, vous pouvez créer et binder une socket pour RTCP
-    // activeSession.socket = createSocket(sessionInfo.ipv6 ? 'udp6' : 'udp4');
-    // activeSession.socket.bind(sessionInfo.videoReturnPort);
-  
     this.ongoingSessions.set(request.sessionID, activeSession);
     this.pendingSessions.delete(request.sessionID);
   

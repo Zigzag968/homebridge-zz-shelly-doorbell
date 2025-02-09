@@ -375,9 +375,9 @@ class DummyCameraAccessory {
         supportedCryptoSuites: [0],
         video: {
           resolutions: [
-            [640, 480, 15],
-            [320, 240, 15],
-            [1280, 720, 15]
+            [1960, 1080, 15],
+            [1960, 1080, 30],
+            [1960, 1080, 60]
           ],
           codec: {
             profiles: [0, 1, 2],
