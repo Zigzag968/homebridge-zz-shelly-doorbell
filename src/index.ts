@@ -15,6 +15,7 @@ import * as http from 'http';
 import { URL } from 'url';
 import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
+import * as path from 'path';
 
 let hap: HAP;
 
@@ -353,8 +354,9 @@ class DummyCameraAccessory {
       async handleSnapshotRequest(request: any) {
         // Ici, on lit l'image statique depuis le fichier (assurez-vous que './static.jpg' existe)
         try {
-          const data = await fs.promises.readFile('./media/static.jpg');
-          return data;
+          const imagePath = path.join(process.cwd(), 'media', 'static.jpg');
+          const data = await fs.promises.readFile(imagePath);
+            return data;
         } catch (err) {
           if (err instanceof Error) {
             throw new Error("Erreur lors de la lecture de l'image statique: " + err.message);
@@ -363,8 +365,15 @@ class DummyCameraAccessory {
           }
         }
       },
-      async prepareStream(_request: any) { throw new Error("Streaming non supporté"); },
-      async handleStreamRequest(_request: any) { throw new Error("Streaming non supporté"); },
+      /**
+         * Gère la requête de flux.
+         * Ici, nous renvoyons simplement l'image statique pour toute demande de flux.
+         */
+      async handleStreamRequest(request: any): Promise<Buffer> {
+        const imagePath = path.join(process.cwd(), 'media', 'static.jpg');
+        const data = await fs.promises.readFile(imagePath);
+        return data;
+      }
     };
 
     // Définir les options du contrôleur caméra selon l'interface CameraControllerOptions
