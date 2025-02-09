@@ -6,16 +6,20 @@ import {
   PlatformConfig,
   Service,
   Characteristic,
-  CharacteristicValue
+  CharacteristicValue,
+  HAP,
 } from 'homebridge';
 import * as http from 'http';
 import { URL } from 'url';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
 
+let hap: HAP;
+
 /**
  * Point d'entrée du plugin.
  */
 module.exports = (homebridge: API) => {
+  hap = homebridge.hap;
   homebridge.registerPlatform(PLATFORM_NAME, ShellyDoorbellPlatform);
 };
 
@@ -173,9 +177,9 @@ class ShellyDoorbellAccessory {
     this.informationService =
       accessory.getService(Service.AccessoryInformation) || accessory.addService(Service.AccessoryInformation);
     this.informationService
-      .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
-      .setCharacteristic(Characteristic.Model, 'Shelly 1 Gen 3')
-      .setCharacteristic(Characteristic.SerialNumber, config.host);
+      .setCharacteristic(hap.Characteristic.Manufacturer, 'Shelly')
+      .setCharacteristic(hap.Characteristic.Model, 'Shelly 1 Gen 3')
+      .setCharacteristic(hap.Characteristic.SerialNumber, config.host);
 
     // Service de sonnette (Stateless Programmable Switch)
     this.doorbellService = accessory.getService(Service.Doorbell) ||
@@ -184,15 +188,15 @@ class ShellyDoorbellAccessory {
     // Bouton de test pour simuler la sonnette
     this.testButtonService =
       accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
-    this.testButtonService.getCharacteristic(Characteristic.On)
+    this.testButtonService.getCharacteristic(hap.Characteristic.On)
       .onSet((value: CharacteristicValue) => this.handleTestButton(value as boolean))
       .onGet(() => false);
 
     // Bouton pour ouvrir la porte
     this.openDoorService = accessory.getService(Service.LockMechanism) ||
-    accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
+    accessory.addService(Service.LockMechanism, "Serrure de Porte", "openDoor");
     
-    this.openDoorService.getCharacteristic(Characteristic.LockTargetState)
+    this.openDoorService.getCharacteristic(hap.Characteristic.LockTargetState)
     .onSet(this.handleLockTargetState.bind(this))
     .onGet(this.getLockCurrentState.bind(this));
   }
@@ -204,7 +208,7 @@ class ShellyDoorbellAccessory {
   public triggerDoorbell(): void {
     const { Characteristic } = this.platform.api.hap;
     this.platform.log.info(`Déclenchement de la sonnette pour ${this.config.host}`);
-    this.doorbellService.updateCharacteristic(Characteristic.ProgrammableSwitchEvent, Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
+    this.doorbellService.updateCharacteristic(hap.Characteristic.ProgrammableSwitchEvent, hap.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
   }
 
   /**
@@ -217,7 +221,7 @@ class ShellyDoorbellAccessory {
       this.platform.log.info(`Test Doorbell activé pour ${this.config.host}`);
       this.triggerDoorbell();
       setTimeout(() => {
-        this.testButtonService.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
+        this.testButtonService.updateCharacteristic(this.platform.api.hap.hap.Characteristic.On, false);
       }, 1000);
     }
   }
@@ -226,7 +230,7 @@ class ShellyDoorbellAccessory {
  * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
  */
 private async handleLockTargetState(value: number): Promise<void> {
-  if (value === Characteristic.LockTargetState.UNSECURED) {
+  if (value === hap.Characteristic.LockTargetState.UNSECURED) {
       this.platform.log.info(`Commande de déverrouillage envoyée pour ${this.config.host}`);
       const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
       this.sendHttpCommand(url, (err) => {
@@ -247,8 +251,8 @@ private async handleLockTargetState(value: number): Promise<void> {
 */
 private getLockCurrentState(): number {
   return this.currentOpenDoorState
-      ? Characteristic.LockCurrentState.UNSECURED
-      : Characteristic.LockCurrentState.SECURED;
+      ? hap.Characteristic.LockCurrentState.UNSECURED
+      : hap.Characteristic.LockCurrentState.SECURED;
 }
 
 /**
@@ -256,13 +260,13 @@ private getLockCurrentState(): number {
 */
 public updateLockState(isUnlocked: boolean): void {
   this.currentOpenDoorState = isUnlocked;
-  this.openDoorService.updateCharacteristic(Characteristic.LockCurrentState, isUnlocked
-      ? Characteristic.LockCurrentState.UNSECURED
-      : Characteristic.LockCurrentState.SECURED
+  this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, isUnlocked
+      ? hap.Characteristic.LockCurrentState.UNSECURED
+      : hap.Characteristic.LockCurrentState.SECURED
   );
-  this.openDoorService.updateCharacteristic(Characteristic.LockTargetState, isUnlocked
-      ? Characteristic.LockTargetState.UNSECURED
-      : Characteristic.LockTargetState.SECURED
+  this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, isUnlocked
+      ? hap.Characteristic.LockTargetState.UNSECURED
+      : hap.Characteristic.LockTargetState.SECURED
   );
 }
 
@@ -274,7 +278,7 @@ public updateLockState(isUnlocked: boolean): void {
     if (this.currentOpenDoorState !== newState) {
       this.currentOpenDoorState = newState;
       this.platform.log.info(`Mise à jour de l’état "Ouvrir la Porte" pour ${this.config.host} : ${newState ? 'ON' : 'OFF'}`);
-      this.openDoorService.updateCharacteristic(this.platform.api.hap.Characteristic.On, newState);
+      this.openDoorService.updateCharacteristic(this.platform.api.hap.hap.Characteristic.On, newState);
     }
   }
 
