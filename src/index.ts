@@ -59,8 +59,7 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.info('Restauration d’un accessoire depuis le cache :', accessory.displayName);
     this.accessories.push(accessory);
-    // Forcer la catégorie en INTERCOM pour que l'accessoire soit reconnu comme un interphone
-    accessory.category = hap.Categories.INTERCOM;
+    
     const deviceConfig = accessory.context.device;
     if (deviceConfig && deviceConfig.host) {
       const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
@@ -86,15 +85,15 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
       if (accessory) {
         this.log.info('Restauration de l’accessoire existant :', accessory.displayName);
         accessory.context.device = deviceConfig;
-        // Forcer la catégorie en INTERCOM
-        accessory.category = hap.Categories.INTERCOM;
+        
+  
         const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
         this.accessoryMap.set(deviceConfig.host, shellyAccessory);
       } else {
         this.log.info('Ajout d’un nouvel accessoire :', deviceConfig.name || deviceConfig.host);
         accessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Doorbell', uuid);
-        // Forcer la catégorie en INTERCOM
-        accessory.category = hap.Categories.INTERCOM;
+        
+  
         accessory.context.device = deviceConfig;
         const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
         this.accessories.push(accessory);
@@ -144,9 +143,11 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
       res.end('Événement doorbell traité');
     } else if (eventParam === 'openDoor') {
       if (stateParam === 'on') {
-        shellyAccessory.updateOpenDoorState(true);
+        shellyAccessory.updateLockState(true);
+        this.log.debug('Webhook reçu : état openDoor -> on');
       } else if (stateParam === 'off') {
-        shellyAccessory.updateOpenDoorState(false);
+        shellyAccessory.updateLockState(false);
+        this.log.debug('Webhook reçu : état openDoor -> off');
       } else {
         res.statusCode = 400;
         res.end('Paramètre "state" invalide pour openDoor');
@@ -235,20 +236,31 @@ class ShellyDoorbellAccessory {
   /**
  * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
  */
-private async handleLockTargetState(value: number): Promise<void> {
+private async handleLockTargetState(value: CharacteristicValue): Promise<void> {
   if (value === hap.Characteristic.LockTargetState.UNSECURED) {
-      this.platform.log.info(`Commande de déverrouillage envoyée pour ${this.config.host}`);
-      const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
-      this.sendHttpCommand(url, (err) => {
-          if (err) {
-              this.platform.log.error(`Erreur lors de la commande d'ouverture : ${err.message}`);
-          } else {
-              this.platform.log.info(`Porte déverrouillée`);
-              this.updateLockState(true); // Simule que la porte est ouverte
-          }
-      });
+    this.platform.log.info(`Commande de déverrouillage envoyée pour ${this.config.host}`);
+    const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=true`;
+    this.sendHttpCommand(url, (err) => {
+      if (err) {
+        this.platform.log.error(`Erreur lors de la commande d'ouverture : ${err.message}`);
+      } else {
+        this.platform.log.info(`Porte déverrouillée`);
+        this.updateLockState(true); // Simule que la porte est ouverte
+      }
+    });
+  } else if (value === hap.Characteristic.LockTargetState.SECURED) {
+    this.platform.log.info(`Commande de verrouillage envoyée pour ${this.config.host}`);
+    const url = `http://${this.config.host}/rpc/Switch.Set?id=0&on=false`;
+    this.sendHttpCommand(url, (err) => {
+      if (err) {
+        this.platform.log.error(`Erreur lors de la commande de fermeture : ${err.message}`);
+      } else {
+        this.platform.log.info(`Porte verrouillée`);
+        this.updateLockState(false); // Simule que la porte est fermée
+      }
+    });
   } else {
-      this.platform.log.info(`Commande de verrouillage reçue, mais action non supportée`);
+    this.platform.log.info(`État de verrouillage non supporté : ${value}`);
   }
 }
 
@@ -265,28 +277,22 @@ private getLockCurrentState(): number {
 * Met à jour l'état de la serrure dans HomeKit.
 */
 public updateLockState(isUnlocked: boolean): void {
-  this.currentOpenDoorState = isUnlocked;
-  this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, isUnlocked
-      ? hap.Characteristic.LockCurrentState.UNSECURED
-      : hap.Characteristic.LockCurrentState.SECURED
-  );
-  this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, isUnlocked
-      ? hap.Characteristic.LockTargetState.UNSECURED
-      : hap.Characteristic.LockTargetState.SECURED
-  );
+  this.platform.log.info(`updateLockState appelé avec isUnlocked=${isUnlocked}`);
+  const newTargetState = isUnlocked 
+      ? hap.Characteristic.LockTargetState.UNSECURED 
+      : hap.Characteristic.LockTargetState.SECURED;
+  const newCurrentState = isUnlocked 
+      ? hap.Characteristic.LockCurrentState.UNSECURED 
+      : hap.Characteristic.LockCurrentState.SECURED;
+  
+  this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, newTargetState);
+  this.platform.log.info(`LockTargetState mis à jour à ${newTargetState}`);
+  
+  setTimeout(() => {
+    this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, newCurrentState);
+    this.platform.log.info(`LockCurrentState mis à jour à ${newCurrentState}`);
+  }, 500);
 }
-
-  /**
-   * Met à jour l’état du bouton "Ouvrir la Porte" dans HomeKit.
-   * Cet état est mis à jour soit suite à une commande envoyée, soit via un webhook reçu de Shelly.
-   */
-  public updateOpenDoorState(newState: boolean): void {
-    if (this.currentOpenDoorState !== newState) {
-      this.currentOpenDoorState = newState;
-      this.platform.log.info(`Mise à jour de l’état "Ouvrir la Porte" pour ${this.config.host} : ${newState ? 'ON' : 'OFF'}`);
-      this.openDoorService.updateCharacteristic(this.platform.api.hap.Characteristic.On, newState);
-    }
-  }
 
   /**
    * Envoie une commande HTTP GET à l’URL spécifiée.
