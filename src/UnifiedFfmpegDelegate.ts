@@ -47,7 +47,8 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
 
   constructor(
     private readonly log: Logger,
-    private readonly source: string[],   // Par exemple, "-i /chemin/vers/fakeStreetImage.jpg"
+    private readonly localSnapshotPath: string,
+    private readonly localStreamPath: string,
     private readonly cameraName: string,
     private readonly hap: HAP,
   ) {}
@@ -119,7 +120,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement du snapshot via FFmpeg`);
     // Construction de la commande FFmpeg pour un snapshot
     // On utilise "-frames:v 1 -vsync 0" pour capturer une unique image.
-    const ffmpegArgs = `${this.source} -frames:v 1 -vsync 0 -f mjpeg -hide_banner -loglevel error -`;
+    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vsync 0 -f mjpeg -hide_banner -loglevel error -`;
     this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
 
     const args = ffmpegArgs.split(' ');
@@ -182,30 +183,36 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     const fps = request.video.fps;              // Utilisez le framerate négocié
     const videoBitrate = request.video.max_bit_rate; // Bitrate négocié
 
-    // Construction du tableau d'arguments pour FFmpeg
-    const ffmpegArgsArray = [
-      '-re',
-      '-stream_loop', '-1',                   // Boucler la vidéo indéfiniment
-      ...this.source,                    // Option d'entrée
-      '-fflags', '+genpts',
-      '-an', '-sn', '-dn',                     // Pas d'audio, sous-titres, ou données
-      '-codec:v', 'libx264',
-      '-preset', 'veryfast',
-      '-tune', 'zerolatency',
-      '-pix_fmt', 'yuv420p',
-      '-r', `${fps}`,
-      '-b:v', `${videoBitrate}k`,
-      '-f', 'rtp',
-      '-payload_type', '96',
-      '-ssrc', `${sessionInfo.videoSSRC}`,
-      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
-      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
-      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-      '-loglevel', 'level+verbose'
-    ];
-  
-    this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${ffmpegArgsArray.join(' ')}`);
-    const ffmpegProc = spawn('ffmpeg', ffmpegArgsArray, { env: process.env });
+    // // Construction du tableau d'arguments pour FFmpeg
+    // const ffmpegArgsArray = [
+    //   '-re',
+    //   '-r', `${fps}`,
+    //   '-stream_loop', '-1',                   // Boucler la vidéo indéfiniment
+    //   ...this.source,                    // Option d'entrée
+    //   '-fflags', '+genpts',
+    //   '-an', '-sn', '-dn',                     // Pas d'audio, sous-titres, ou données
+    //   '-codec:v', 'libx264',
+    //   '-profile:v', 'baseline',
+    //   '-preset', 'veryfast',
+    //   '-tune', 'zerolatency',
+    //   '-pix_fmt', 'yuv420p',
+    //   '-color_range', `mpeg`,
+    //   '-b:v', `${videoBitrate}k`,
+    //   '-f', 'rtp',
+    //   '-flush_packets', '1', 
+    //   '-payload_type', '96',
+    //   '-ssrc', `${sessionInfo.videoSSRC}`,
+    //   '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
+    //   '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
+    //   `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
+    //   '-loglevel', 'level+verbose'
+    // ];
+
+    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vsync 0 -f mjpeg -hide_banner -loglevel error -`;
+    const args = ffmpegArgs.split(' ');
+
+    this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${args.join(' ')}`);
+    const ffmpegProc = spawn('ffmpeg', args, { env: process.env });
   
     ffmpegProc.on('error', (err: Error) => {
       this.log.error(`[${this.cameraName}] FFmpeg stream error: ${err.message}`);
