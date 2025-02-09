@@ -27,6 +27,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 
 const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
+const fakeStreamPath = path.join(__dirname, 'media', 'fakeStream.mp4');
 
 let hap: HAP;
 
@@ -363,7 +364,7 @@ class DummyCameraAccessory {
     // Créer l'instance du délégué FFmpeg en passant undefined pour le CameraController
     const ffmpegDelegate = new UnifiedFfmpegDelegate(
       this.platform.log,
-      ['-i', fakeStreetImagePath],
+      ['-i', fakeStreamPath],
       accessory.displayName,
       hap
     );
