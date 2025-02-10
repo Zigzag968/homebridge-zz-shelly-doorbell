@@ -89,49 +89,37 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
    */
 // Dans la classe ShellyDoorbellPlatform
 discoverDevices(): void {
-  const devices = (this.config.devices && Array.isArray(this.config.devices))
-      ? this.config.devices
-      : [this.config];
+  const devices = Array.isArray(this.config.devices) 
+    ? this.config.devices 
+    : [this.config];
+
   for (const deviceConfig of devices) {
     if (!deviceConfig.host) {
       this.log.error('La configuration d’un dispositif doit inclure la propriété "host".');
       continue;
     }
 
-    // --- Création de l'accessoire porte (serrure) ---
-    const lockUUID = this.api.hap.uuid.generate(deviceConfig.host);
-    let lockAccessory = this.accessories.find(acc => acc.UUID === lockUUID);
-    if (lockAccessory) {
-      this.log.info('Restauration de l’accessoire porte existant :', lockAccessory.displayName);
-      lockAccessory.context.device = deviceConfig;
-      // Optionnel : forcer la catégorie si besoin (ex. INTERCOM pour enrichir la notification)
-      // lockAccessory.category = INTERCOM_CATEGORY; // si vous en avez défini une
-      new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig);
-      this.accessoryMap.set(deviceConfig.host, new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig));
-    } else {
-      this.log.info('Ajout d’un nouvel accessoire porte :', deviceConfig.name || deviceConfig.host);
-      lockAccessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Door', lockUUID);
-      lockAccessory.context.device = deviceConfig;
-      new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig);
-      this.accessories.push(lockAccessory);
-      this.accessoryMap.set(deviceConfig.host, new ShellyDoorbellAccessory(this, lockAccessory, deviceConfig));
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [lockAccessory]);
-    }
+    // Génère un UUID unique pour ce dispositif
+    const uuid = this.api.hap.uuid.generate(deviceConfig.host);
 
-    // --- Création de l'accessoire caméra dummy ---
-    const cameraUUID = this.api.hap.uuid.generate("camera-" + deviceConfig.host);
-    let cameraAccessory = this.accessories.find(acc => acc.UUID === cameraUUID);
-    if (cameraAccessory) {
-      this.log.info('Restauration de l’accessoire caméra existant :', cameraAccessory.displayName);
-      cameraAccessory.context.device = deviceConfig;
-      new DummyCameraAccessory(this, cameraAccessory);
+    // Vérifie si l'accessoire existe déjà dans le cache
+    let existingAccessory: PlatformAccessory | undefined = this.accessories.find(acc => acc.UUID === uuid);
+
+    if (existingAccessory) {
+      this.log.info('Mise à jour de l’accessoire existant :', existingAccessory.displayName);
+      existingAccessory.context.device = deviceConfig;
+      const shellyAccessory = new ShellyDoorbellAccessory(this, existingAccessory, deviceConfig);
+      this.accessoryMap.set(deviceConfig.host, shellyAccessory);
     } else {
-      this.log.info('Ajout d’un nouvel accessoire caméra pour', deviceConfig.host);
-      cameraAccessory = new this.api.platformAccessory(deviceConfig.name ? deviceConfig.name + " Camera" : "Dummy Camera", cameraUUID);
-      cameraAccessory.context.device = deviceConfig;
-      new DummyCameraAccessory(this, cameraAccessory);
-      this.accessories.push(cameraAccessory);
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [cameraAccessory]);
+      this.log.info('Création d’un nouvel accessoire :', deviceConfig.name || deviceConfig.host);
+      const accessory = new this.api.platformAccessory(deviceConfig.name || 'Shelly Doorbell', uuid);
+      accessory.context.device = deviceConfig;
+      const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
+      this.accessories.push(accessory);
+      this.accessoryMap.set(deviceConfig.host, shellyAccessory);
+
+      // Enregistre le nouvel accessoire auprès de Homebridge
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     }
   }
 }
@@ -202,9 +190,10 @@ class ShellyDoorbellAccessory {
   private readonly informationService: Service;
   private readonly doorbellService: Service;     // Service Stateless Programmable Switch
   private readonly testButtonService: Service;     // Bouton de test pour la sonnette
-  private readonly openDoorService: Service;       // Bouton pour ouvrir la porte
+  private readonly lockService: Service;       // Bouton pour ouvrir la porte
   // On maintient en interne l’état du bouton "Ouvrir la Porte"
   private currentOpenDoorState: boolean = false;
+  private cameraController?: CameraController;
 
   constructor(
     private readonly platform: ShellyDoorbellPlatform,
@@ -233,12 +222,67 @@ class ShellyDoorbellAccessory {
       .onGet(() => false);
 
     // Bouton pour ouvrir la porte
-    this.openDoorService = accessory.getService(Service.LockMechanism) ||
+    this.lockService = accessory.getService(Service.LockMechanism) ||
     accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
     
-    this.openDoorService.getCharacteristic(hap.Characteristic.LockTargetState)
+    this.lockService.getCharacteristic(hap.Characteristic.LockTargetState)
     .onSet(this.handleLockTargetState.bind(this))
     .onGet(this.getLockCurrentState.bind(this));
+
+    // --- Création de l'accessoire caméra dummy ---
+    this.setupCameraController();
+  }
+
+  /**
+   * Extrait de code pour configurer un "Dummy" CameraController
+   */
+  private setupCameraController() {
+    const { hap } = this.platform.api;
+    const { log } = this.platform;
+
+    // Implémenter un delegate basique
+    const streamingDelegate: CameraStreamingDelegate = {
+      // Snapshot
+      async handleSnapshotRequest(_request) {
+        // Ex : lire un fichier image statique
+        const snapshotPath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
+        try {
+          const data = fs.readFileSync(snapshotPath);
+          return data;
+        } catch (err) {
+          log.error('Erreur lecture image snapshot:', err);
+          throw err;
+        }
+      },
+      // prepareStream
+      async prepareStream(_request) {
+        throw new Error('Streaming non supporté (dummy camera)');
+      },
+      // handleStreamRequest
+      async handleStreamRequest(_request) {
+        throw new Error('Streaming non supporté (dummy camera)');
+      },
+    };
+
+    const cameraControllerOptions: CameraControllerOptions = {
+      delegate: streamingDelegate,
+      streamingOptions: {
+        supportedCryptoSuites: [hap.SRTPCryptoSuites.NONE], // ou AES_CM_128_HMAC_SHA1_80 si besoin
+        video: {
+          resolutions: [
+            [1280, 720, 30],
+            [640, 360, 15],
+          ],
+          codec: {
+            profiles: [hap.H264Profile.BASELINE, hap.H264Profile.MAIN, hap.H264Profile.HIGH],
+            levels: [hap.H264Level.LEVEL3_1, hap.H264Level.LEVEL4_0],
+          },
+        },
+      },
+    };
+
+    this.cameraController = new hap.CameraController(cameraControllerOptions);
+    this.accessory.configureController(this.cameraController);
   }
 
   /**
@@ -318,11 +362,11 @@ public updateLockState(isUnlocked: boolean): void {
       ? hap.Characteristic.LockCurrentState.UNSECURED 
       : hap.Characteristic.LockCurrentState.SECURED;
   
-  this.openDoorService.updateCharacteristic(hap.Characteristic.LockTargetState, newTargetState);
+  this.lockService.updateCharacteristic(hap.Characteristic.LockTargetState, newTargetState);
   this.platform.log.info(`LockTargetState mis à jour à ${newTargetState}`);
   
   setTimeout(() => {
-    this.openDoorService.updateCharacteristic(hap.Characteristic.LockCurrentState, newCurrentState);
+    this.lockService.updateCharacteristic(hap.Characteristic.LockCurrentState, newCurrentState);
     this.platform.log.info(`LockCurrentState mis à jour à ${newCurrentState}`);
   }, 500);
 }

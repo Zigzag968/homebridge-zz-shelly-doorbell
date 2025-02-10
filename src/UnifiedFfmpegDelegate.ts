@@ -186,7 +186,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     // Construction du tableau d'arguments pour FFmpeg
     const ffmpegArgsArray = [
       '-hide_banner',
-      '-loglevel', 'error',
+      '-loglevel', 'info', // Change 'error' to 'info' to log more details
       '-i', this.localStreamPath,
       '-f', 'mpegts',
       '-vcodec', 'mpeg1video',
