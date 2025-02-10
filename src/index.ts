@@ -75,12 +75,6 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
   configureAccessory(accessory: PlatformAccessory): void {
     this.log.info('Restauration d’un accessoire depuis le cache :', accessory.displayName);
     this.accessories.push(accessory);
-    
-    const deviceConfig = accessory.context.device;
-    if (deviceConfig && deviceConfig.host) {
-      const shellyAccessory = new ShellyDoorbellAccessory(this, accessory, deviceConfig);
-      this.accessoryMap.set(deviceConfig.host, shellyAccessory);
-    }
   }
 
   /**
@@ -228,13 +222,7 @@ class ShellyDoorbellAccessory {
       .onSet(this.handleLockTargetState.bind(this))
       .onGet(this.getLockCurrentState.bind(this));
 
-    // Pour éviter l’erreur "already added," on vérifie si on a déjà configuré le cameraController.
-    if (!accessory.context.hasCamera) {
-      this.setupCameraController();
-      accessory.context.hasCamera = true;
-    } else {
-      this.platform.log.debug('Caméra déjà configurée, on ne la reconfigure pas.');
-    }
+    this.setupCameraController();
 
     this.platform.log.info(`ShellyDoorbellAccessory créé pour ${config.host}`);
   }
@@ -260,6 +248,7 @@ class ShellyDoorbellAccessory {
           // ex. [width, height, fps]
           resolutions: [
             [1280, 720, 25],
+            [1280, 720, 30],
             [640, 360, 15],
           ],
           codec: {
@@ -376,57 +365,5 @@ public updateLockState(isUnlocked: boolean): void {
     }).on('error', (err: any) => {
       callback(err);
     });
-  }
-}
-class DummyCameraAccessory {
-  public cameraController?: CameraController;
-
-  constructor(
-    private readonly platform: ShellyDoorbellPlatform,
-    private readonly accessory: PlatformAccessory,
-  ) {
-    const { Service, Characteristic, CameraController } = this.platform.api.hap;
-
-    // Configuration du service AccessoryInformation
-    const infoService = accessory.getService(Service.AccessoryInformation) ||
-      accessory.addService(Service.AccessoryInformation);
-    infoService
-      .setCharacteristic(Characteristic.Manufacturer, "Dummy Camera")
-      .setCharacteristic(Characteristic.Model, "Static Image Camera")
-      .setCharacteristic(Characteristic.SerialNumber, "CAM-" + accessory.UUID);
-
-    // Affecter la catégorie CAMERA (ici 26 si hap.Categories n'est pas défini)
-    accessory.category = 26;
-
-    // Créer l'instance du délégué FFmpeg en passant undefined pour le CameraController
-    const ffmpegDelegate = new UnifiedFfmpegDelegate(
-      this.platform.log,
-      fakeStreetImagePath,
-      fakeStreamPath,
-      accessory.displayName,
-      hap
-    );
-
-    // Définir les options du CameraController
-    const cameraControllerOptions: CameraControllerOptions = {
-      delegate: ffmpegDelegate,
-      streamingOptions: {
-        supportedCryptoSuites: [0],
-        video: {
-          resolutions: [
-            [1280, 720, 25]
-          ],
-          codec: {
-            profiles: [0, 1, 2],
-            levels: [0, 1, 2]
-          }
-        }
-      }
-    };
-
-    // Créer le CameraController avec les options définies
-    const cameraControllerInstance = new CameraController(cameraControllerOptions);
-    
-    accessory.configureController(cameraControllerInstance);
   }
 }

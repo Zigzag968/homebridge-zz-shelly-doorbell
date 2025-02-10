@@ -120,7 +120,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement du snapshot via FFmpeg`);
     // Construction de la commande FFmpeg pour un snapshot
     // On utilise "-frames:v 1 -vsync 0" pour capturer une unique image.
-    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vsync 0 -f mjpeg -hide_banner -loglevel error -`;
+    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vf scale=1280:720:force_original_aspect_ratio=decrease -f mjpeg -hide_banner -loglevel error -`;
     this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
 
     const args = ffmpegArgs.split(' ');
@@ -183,24 +183,42 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     const fps = request.video.fps;              // Utilisez le framerate négocié
     const videoBitrate = request.video.max_bit_rate; // Bitrate négocié
 
-    // Construction du tableau d'arguments pour FFmpeg
+    // // Construction du tableau d'arguments pour FFmpeg
+    // const ffmpegArgsArray = [
+    //   '-hide_banner',
+    //   '-i', this.localStreamPath,
+    //   '-f', 'mpegts',
+    //   '-vcodec', 'mpeg1video',
+    //   '-s', '1280x720',
+    //   '-b:v', `${videoBitrate}k`,
+    //   '-r', `${fps}`,
+    //   '-bf', '0',
+    //   '-preset:v', 'ultrafast',
+    //   '-threads', '1',
+    //   '-an',
+    //   '-q', '1',
+    //   '-max_muxing_queue_size', '9999',
+    //   '-f', 'rtp',
+    //   `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
+    // ];
+
     const ffmpegArgsArray = [
-      '-hide_banner',
-      '-loglevel', 'info', // Change 'error' to 'info' to log more details
+      '-re',
       '-i', this.localStreamPath,
-      '-f', 'mpegts',
-      '-vcodec', 'mpeg1video',
-      '-s', '1280x720',
-      '-b:v', `${videoBitrate}k`,
+      '-loglevel', 'info', // Change 'error' to 'info' to log more details
+      '-an', '-sn', '-dn',
+      '-codec:v', 'libx264',
+      '-preset', 'veryfast',
+      '-tune', 'zerolatency',
+      '-pix_fmt', 'yuv420p',
       '-r', `${fps}`,
-      '-bf', '0',
-      '-preset:v', 'ultrafast',
-      '-threads', '1',
-      '-an',
-      '-q', '1',
-      '-max_muxing_queue_size', '9999',
+      '-b:v', `${videoBitrate}k`,
       '-f', 'rtp',
-      `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
+      '-payload_type', '99',
+      '-ssrc', `${sessionInfo.videoSSRC}`,
+      '-srtp_out_suite', 'AES_CM_128_HMAC_SHA1_80',
+      '-srtp_out_params', sessionInfo.videoSRTP.toString('base64'),
+      `srtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
     ];
 
     this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${ffmpegArgsArray.join(' ')}`);
