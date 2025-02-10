@@ -185,26 +185,22 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
 
     // Construction du tableau d'arguments pour FFmpeg
     const ffmpegArgsArray = [
-      '-re',
+      '-hide_banner',
+      '-loglevel', 'error',
       '-i', this.localStreamPath,
-      '-an', '-sn', '-dn',
-      '-codec:v', 'libx264',
-      '-profile:v', 'baseline',
-      '-tune', 'zerolatency',
-      '-preset', 'veryfast',
-      '-r', `${fps}`,
-      '-g', '30',
-      '-keyint_min', '30',
-      '-sc_threshold', '0',
+      '-f', 'mpegts',
+      '-vcodec', 'mpeg1video',
+      '-s', '1280x720',
       '-b:v', `${videoBitrate}k`,
-      '-maxrate', `${videoBitrate}k`,
-      '-bufsize', `${videoBitrate}k`,
-      '-pix_fmt', 'yuv420p',
-      '-payload_type', '99',
-      '-force_key_frames', 'expr:gte(t,n_forced*2)',
+      '-r', `${fps}`,
+      '-bf', '0',
+      '-preset:v', 'ultrafast',
+      '-threads', '1',
+      '-an',
+      '-q', '1',
+      '-max_muxing_queue_size', '9999',
       '-f', 'rtp',
-      `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`,
-      '-loglevel', 'level+verbose'
+      `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
     ];
 
     this.log.info(`[${this.cameraName}] FFmpeg stream command: ffmpeg ${ffmpegArgsArray.join(' ')}`);
