@@ -183,25 +183,6 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     const fps = request.video.fps;              // Utilisez le framerate négocié
     const videoBitrate = request.video.max_bit_rate; // Bitrate négocié
 
-    // // Construction du tableau d'arguments pour FFmpeg
-    // const ffmpegArgsArray = [
-    //   '-hide_banner',
-    //   '-i', this.localStreamPath,
-    //   '-f', 'mpegts',
-    //   '-vcodec', 'mpeg1video',
-    //   '-s', '1280x720',
-    //   '-b:v', `${videoBitrate}k`,
-    //   '-r', `${fps}`,
-    //   '-bf', '0',
-    //   '-preset:v', 'ultrafast',
-    //   '-threads', '1',
-    //   '-an',
-    //   '-q', '1',
-    //   '-max_muxing_queue_size', '9999',
-    //   '-f', 'rtp',
-    //   `rtp://${sessionInfo.address}:${sessionInfo.videoPort}?rtcpport=${sessionInfo.videoPort}&pkt_size=${mtu}`
-    // ];
-
     const ffmpegArgsArray = [
       '-re',
       '-i', this.localStreamPath,
