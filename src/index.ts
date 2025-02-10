@@ -27,7 +27,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 
 const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
-const fakeStreamPath = path.join(__dirname, 'media', 'fakeStream.mp4');
+const fakeStreamPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream.mp4"// path.join(__dirname, 'media', 'fakeStream.mp4');
 
 let hap: HAP;
 
