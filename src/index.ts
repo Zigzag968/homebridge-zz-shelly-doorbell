@@ -202,87 +202,80 @@ class ShellyDoorbellAccessory {
   ) {
     const { Service, Characteristic } = this.platform.api.hap;
 
-    // Informations sur l’accessoire
-    this.informationService =
-      accessory.getService(Service.AccessoryInformation) || accessory.addService(Service.AccessoryInformation);
+    // Accessory Information
+    this.informationService = accessory.getService(Service.AccessoryInformation)
+      || accessory.addService(Service.AccessoryInformation);
     this.informationService
-      .setCharacteristic(hap.Characteristic.Manufacturer, 'Shelly')
-      .setCharacteristic(hap.Characteristic.Model, 'Shelly 1 Gen 3')
-      .setCharacteristic(hap.Characteristic.SerialNumber, config.host);
+      .setCharacteristic(Characteristic.Manufacturer, 'Shelly')
+      .setCharacteristic(Characteristic.Model, 'Shelly 1 Gen 3')
+      .setCharacteristic(Characteristic.SerialNumber, config.host);
 
-    // Service de sonnette (Stateless Programmable Switch)
-    this.doorbellService = accessory.getService(Service.Doorbell) ||
-      accessory.addService(Service.Doorbell, "Doorbell", "doorbellService");
+    // Doorbell Service
+    this.doorbellService = accessory.getService(Service.Doorbell)
+      || accessory.addService(Service.Doorbell, "Doorbell", "doorbellService");
 
-    // Bouton de test pour simuler la sonnette
-    this.testButtonService =
-      accessory.getService('Test Doorbell') || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
-    this.testButtonService.getCharacteristic(hap.Characteristic.On)
-      .onSet((value: CharacteristicValue) => this.handleTestButton(value as boolean))
+    // Switch "Test Doorbell"
+    this.testButtonService = accessory.getService('Test Doorbell')
+      || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
+    this.testButtonService.getCharacteristic(Characteristic.On)
+      .onSet(value => this.handleTestButton(value as boolean))
       .onGet(() => false);
 
-    // Bouton pour ouvrir la porte
-    this.lockService = accessory.getService(Service.LockMechanism) ||
-    accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
-    
-    this.lockService.getCharacteristic(hap.Characteristic.LockTargetState)
-    .onSet(this.handleLockTargetState.bind(this))
-    .onGet(this.getLockCurrentState.bind(this));
+    // Lock Mechanism
+    this.lockService = accessory.getService(Service.LockMechanism)
+      || accessory.addService(Service.LockMechanism, "Door Lock", "doorLock");
+    this.lockService.getCharacteristic(Characteristic.LockTargetState)
+      .onSet(this.handleLockTargetState.bind(this))
+      .onGet(this.getLockCurrentState.bind(this));
 
-    // --- Création de l'accessoire caméra dummy ---
-    this.setupCameraController();
+    // Pour éviter l’erreur "already added," on vérifie si on a déjà configuré le cameraController.
+    if (!accessory.context.hasCamera) {
+      this.setupCameraController();
+      accessory.context.hasCamera = true;
+    } else {
+      this.platform.log.debug('Caméra déjà configurée, on ne la reconfigure pas.');
+    }
+
+    this.platform.log.info(`ShellyDoorbellAccessory créé pour ${config.host}`);
   }
 
-  /**
-   * Extrait de code pour configurer un "Dummy" CameraController
-   */
   private setupCameraController() {
     const { hap } = this.platform.api;
     const { log } = this.platform;
 
-    // Implémenter un delegate basique
-    const streamingDelegate: CameraStreamingDelegate = {
-      // Snapshot
-      async handleSnapshotRequest(_request) {
-        // Ex : lire un fichier image statique
-        const snapshotPath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
-        try {
-          const data = fs.readFileSync(snapshotPath);
-          return data;
-        } catch (err) {
-          log.error('Erreur lecture image snapshot:', err);
-          throw err;
-        }
-      },
-      // prepareStream
-      async prepareStream(_request) {
-        throw new Error('Streaming non supporté (dummy camera)');
-      },
-      // handleStreamRequest
-      async handleStreamRequest(_request) {
-        throw new Error('Streaming non supporté (dummy camera)');
-      },
-    };
+    // On crée le delegate Ffmpeg
+    const ffmpegDelegate = new UnifiedFfmpegDelegate(
+      this.platform.log,
+      fakeStreetImagePath,
+      fakeStreamPath,
+      this.accessory.displayName,
+      hap,
+    );
 
     const cameraControllerOptions: CameraControllerOptions = {
-      delegate: streamingDelegate,
+      delegate: ffmpegDelegate,
       streamingOptions: {
-        supportedCryptoSuites: [hap.SRTPCryptoSuites.NONE], // ou AES_CM_128_HMAC_SHA1_80 si besoin
+        supportedCryptoSuites: [0],
         video: {
+          // ex. [width, height, fps]
           resolutions: [
-            [1280, 720, 30],
+            [1280, 720, 25],
             [640, 360, 15],
           ],
           codec: {
-            profiles: [hap.H264Profile.BASELINE, hap.H264Profile.MAIN, hap.H264Profile.HIGH],
-            levels: [hap.H264Level.LEVEL3_1, hap.H264Level.LEVEL4_0],
-          },
-        },
-      },
+            profiles: [0, 1, 2],
+            levels: [0, 1, 2]
+          }
+        }
+      }
     };
 
     this.cameraController = new hap.CameraController(cameraControllerOptions);
     this.accessory.configureController(this.cameraController);
+
+    // On peut aussi définir la catégorie de l'accessoire comme CAMÉRA
+    this.accessory.category = hap.Categories.CAMERA;
+    this.platform.log.info('CameraController configuré pour', this.config.host);
   }
 
   /**
