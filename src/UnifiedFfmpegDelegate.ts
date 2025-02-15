@@ -120,7 +120,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement du snapshot via FFmpeg`);
     // Construction de la commande FFmpeg pour un snapshot
     // On utilise "-frames:v 1 -vsync 0" pour capturer une unique image.
-    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vf scale=1280:720:force_original_aspect_ratio=decrease -f mjpeg -hide_banner -loglevel error -`;
+    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vf scale=1920:1080:force_original_aspect_ratio=decrease -f mjpeg -hide_banner -loglevel error -`;
     this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
 
     const args = ffmpegArgs.split(' ');

@@ -247,7 +247,9 @@ class ShellyDoorbellAccessory {
         video: {
           // ex. [width, height, fps]
           resolutions: [
-            [1280, 720, 25],
+            [1280, 720, 24],
+            [1920, 1080, 30],
+            [1920, 1080, 24],
             [1280, 720, 30],
             [640, 360, 15],
           ],
