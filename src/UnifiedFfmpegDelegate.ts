@@ -218,7 +218,7 @@ export class FakeStreamFfmpegDelegate implements CameraStreamingDelegate {
     const ffmpegArgsArray = [
       '-re',
       '-i', this.config.getVideoPath(),
-      '-loglevel', 'info', // Change 'error' to 'info' to log more details
+      '-loglevel', 'error', // Change 'error' to 'info' to log more details
       '-an', '-sn', '-dn',
       '-codec:v', 'libx264',
       '-preset', 'veryfast',
