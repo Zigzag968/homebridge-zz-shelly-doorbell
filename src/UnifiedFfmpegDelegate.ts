@@ -12,6 +12,7 @@ import {
 import { spawn } from 'child_process';
 import { createSocket, Socket } from 'dgram';
 import { pickPort, Type } from 'pick-port';
+import { getTimes } from 'suncalc';
 
 //
 // Interfaces pour stocker les informations de session
@@ -37,18 +38,49 @@ interface ActiveSession {
   timeout?: NodeJS.Timeout;
 }
 
+export class FakeStreamConfig {
+  private readonly videoPath: FakeStreamPath;
+  private readonly cityLat: number;
+  private readonly cityLon: number;
+
+constructor(videoPath: FakeStreamPath, cityLat: number, cityLon: number) {
+  this.videoPath = videoPath;
+  this.cityLat = cityLat;
+  this.cityLon = cityLon;
+}
+
+getVideoPath(): string {
+  const times = getTimes(new Date(), this.cityLat, this.cityLon);
+  const now = new Date();
+  const isNight = now < times.sunrise || now > times.sunset;
+  return this.videoPath.getPath(isNight);
+}
+}
+
+export class FakeStreamPath {
+  private readonly day: string;
+  private readonly night: string;
+
+  constructor(day: string, night: string) {
+    this.day = day;
+    this.night = night;
+  }
+
+  getPath(isNight: boolean): string {
+    return isNight ? this.night : this.day;
+  }
+}
 //
 // Delegate utilisant FFmpeg pour générer un snapshot et un flux vidéo continu
 //
-export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
+export class FakeStreamFfmpegDelegate implements CameraStreamingDelegate {
   // Maps pour gérer les sessions en attente et actives.
   private pendingSessions: Map<string, SessionInfo> = new Map();
   private ongoingSessions: Map<string, ActiveSession> = new Map();
 
   constructor(
     private readonly log: Logger,
-    private readonly localSnapshotPath: string,
-    private readonly localStreamPath: string,
+    private readonly config: FakeStreamConfig,
     private readonly cameraName: string,
     private readonly hap: HAP,
   ) {}
@@ -120,7 +152,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
     this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement du snapshot via FFmpeg`);
     // Construction de la commande FFmpeg pour un snapshot
     // On utilise "-frames:v 1 -vsync 0" pour capturer une unique image.
-    const ffmpegArgs = `-i ${this.localSnapshotPath} -frames:v 1 -vf scale=1920:1080:force_original_aspect_ratio=decrease -f mjpeg -hide_banner -loglevel error -`;
+    const ffmpegArgs = `-i ${this.config.getVideoPath()} -frames:v 1 -vf scale=1920:1080:force_original_aspect_ratio=decrease -f mjpeg -hide_banner -loglevel error -`;
     this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
 
     const args = ffmpegArgs.split(' ');
@@ -185,7 +217,7 @@ export class UnifiedFfmpegDelegate implements CameraStreamingDelegate {
 
     const ffmpegArgsArray = [
       '-re',
-      '-i', this.localStreamPath,
+      '-i', this.config.getVideoPath(),
       '-loglevel', 'info', // Change 'error' to 'info' to log more details
       '-an', '-sn', '-dn',
       '-codec:v', 'libx264',

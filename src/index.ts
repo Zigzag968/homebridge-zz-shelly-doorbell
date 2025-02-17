@@ -22,12 +22,12 @@ import * as http from 'http';
 import { URL } from 'url';
 import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
-import { UnifiedFfmpegDelegate } from './UnifiedFfmpegDelegate';
+import { FakeStreamFfmpegDelegate, FakeStreamConfig, FakeStreamPath } from './UnifiedFfmpegDelegate';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-const fakeStreetImagePath = path.join(__dirname, 'media', 'fakeStreetImage.jpg');
-const fakeStreamPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream.mp4"// path.join(__dirname, 'media', 'fakeStream.mp4');
+const fakeStreamDayPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream_day.mp4"// path.join(__dirname, 'media', 'fakeStream_day.mp4');
+const fakeStreamNightPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream_night.mp4"// path.join(__dirname, 'media', 'fakeStream_night.mp4');
 
 let hap: HAP;
 
@@ -232,10 +232,9 @@ class ShellyDoorbellAccessory {
     const { log } = this.platform;
 
     // On crée le delegate Ffmpeg
-    const ffmpegDelegate = new UnifiedFfmpegDelegate(
+    const ffmpegDelegate = new FakeStreamFfmpegDelegate(
       this.platform.log,
-      fakeStreetImagePath,
-      fakeStreamPath,
+      new FakeStreamConfig(new FakeStreamPath(fakeStreamDayPath, fakeStreamNightPath), 52.520008, 13.404954),
       this.accessory.displayName,
       hap,
     );
