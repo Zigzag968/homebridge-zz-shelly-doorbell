@@ -1,5 +1,8 @@
 # Ignore compiled code
-dist
+dist/*
+
+# Except the media directory
+!dist/media/
 
 # ------------- Defaults ------------- #
 .DS_Store
