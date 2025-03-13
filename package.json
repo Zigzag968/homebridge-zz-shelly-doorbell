@@ -4,8 +4,9 @@
   "description": "Plugin Homebridge pour Shelly Doorbell utilisant des webhooks (RPC)",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p ./",
-    "prepublishOnly": "npm run build"
+    "build": "tsc -p ./ && npm run move-media",
+    "prepublishOnly": "npm run build",
+    "move-media": "mv ./media ./dist/media"
   },
   "keywords": [
     "homebridge-plugin",
