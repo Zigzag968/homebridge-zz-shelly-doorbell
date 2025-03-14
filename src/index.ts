@@ -183,7 +183,7 @@ discoverDevices(): void {
 class ShellyDoorbellAccessory {
   private readonly informationService: Service;
   private readonly doorbellService: Service;     // Service Stateless Programmable Switch
-  private readonly testButtonService: Service;     // Bouton de test pour la sonnette
+  private readonly doorbellButtonService: Service;     // Bouton de test pour la sonnette
   private readonly lockService: Service;       // Bouton pour ouvrir la porte
   // On maintient en interne l’état du bouton "Ouvrir la Porte"
   private currentOpenDoorState: boolean = false;
@@ -207,13 +207,18 @@ class ShellyDoorbellAccessory {
     // Doorbell Service
     this.doorbellService = accessory.getService(Service.Doorbell)
       || accessory.addService(Service.Doorbell, "Doorbell", "doorbellService");
+    
+    // Doorbell Service configuration
+    this.doorbellService.getCharacteristic(Characteristic.ProgrammableSwitchEvent)
+      .on('change', this.handleDoorbellChange.bind(this));
 
-    // Switch "Test Doorbell"
-    this.testButtonService = accessory.getService('Test Doorbell')
-      || accessory.addService(Service.Switch, 'Test Doorbell', 'doorbellTest');
-    this.testButtonService.getCharacteristic(Characteristic.On)
-      .onSet(value => this.handleTestButton(value as boolean))
-      .onGet(() => false);
+    // Doorbell Button
+    this.doorbellButtonService = accessory.getService('Doorbell button')
+      || accessory.addService(Service.Switch, 'Doorbell button', 'doorbellButton');
+    
+    this.doorbellButtonService.getCharacteristic(Characteristic.On)
+      .onSet(this.handleDoorbellButtonSet.bind(this))
+      .onGet(this.handleDoorbellButtonGet.bind(this));
 
     // Lock Mechanism
     this.lockService = accessory.getService(Service.LockMechanism)
@@ -291,21 +296,6 @@ class ShellyDoorbellAccessory {
   }
 
   /**
-   * Handler pour le bouton Test Doorbell activé depuis HomeKit.
-   * Lorsque l’utilisateur active le bouton, on simule un événement de sonnette,
-   * puis on remet le bouton à OFF après 1 seconde.
-   */
-  private async handleTestButton(value: boolean): Promise<void> {
-    if (value as boolean) {
-      this.platform.log.info(`Test Doorbell activé pour ${this.config.host}`);
-      this.triggerDoorbell();
-      setTimeout(() => {
-        this.testButtonService.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
-      }, 1000);
-    }
-  }
-
-  /**
  * HomeKit demande à changer l'état de la serrure (ouvrir/fermer).
  */
 private async handleLockTargetState(value: CharacteristicValue): Promise<void> {
@@ -366,6 +356,23 @@ public updateLockState(isUnlocked: boolean): void {
   }, 500);
 }
 
+private handleDoorbellButtonGet(): boolean {
+  return false;
+}
+
+private handleDoorbellButtonSet(value: CharacteristicValue): void {
+  if (value as boolean) {
+  this.triggerDoorbell();
+  }
+}
+
+private handleDoorbellChange(): void {
+  // When doorbell is triggered, set doorbell button to ON temporarily
+  this.doorbellButtonService.updateCharacteristic(this.platform.api.hap.Characteristic.On, true);
+  setTimeout(() => {
+  this.doorbellButtonService.updateCharacteristic(this.platform.api.hap.Characteristic.On, false);
+  }, 1000);
+}
   /**
    * Envoie une commande HTTP GET à l’URL spécifiée.
    */
