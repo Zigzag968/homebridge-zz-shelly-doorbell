@@ -22,7 +22,7 @@ import * as http from 'http';
 import { URL } from 'url';
 import * as fs from 'fs';
 import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
-import { FakeStreamFfmpegDelegate, FakeStreamConfig, FakeStreamPath } from './UnifiedFfmpegDelegate';
+import { CustomStreamFfmpegDelegate, FakeStreamFfmpegDelegate, FakeStreamConfig, FakeStreamPath } from './UnifiedFfmpegDelegate';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
@@ -231,13 +231,25 @@ class ShellyDoorbellAccessory {
     const { hap } = this.platform.api;
     const { log } = this.platform;
 
-    // On crée le delegate Ffmpeg
-    const ffmpegDelegate = new FakeStreamFfmpegDelegate(
+    let ffmpegDelegate;
+
+    if (this.config.streamUrl) {
+      ffmpegDelegate = new CustomStreamFfmpegDelegate(
+      this.platform.log,
+      this.config.streamUrl,
+      this.accessory.displayName,
+      hap,
+      );
+      this.platform.log.info(`Utilisation du flux personnalisé pour ${this.config.host}`);
+    } else {
+      ffmpegDelegate = new FakeStreamFfmpegDelegate(
       this.platform.log,
       new FakeStreamConfig(new FakeStreamPath(fakeStreamDayPath, fakeStreamNightPath), 52.520008, 13.404954),
       this.accessory.displayName,
       hap,
-    );
+      );
+      this.platform.log.info(`Utilisation du flux fake pour ${this.config.host}`);
+    }
 
     const cameraControllerOptions: CameraControllerOptions = {
       delegate: ffmpegDelegate,
