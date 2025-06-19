@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc -p ./ && npm run move-media",
     "prepublishOnly": "npm run build",
-    "move-media": "mv ./media ./dist/media"
+    "move-media": "if [ -d ./media ]; then mv ./media ./dist/media; fi",
+    "postinstall": "npm run build && npm run move-media"
   },
   "keywords": [
     "homebridge-plugin",
@@ -24,12 +25,12 @@
     "homebridge": "^1.8.0 || ^2.0.0-beta.0"
   },
   "devDependencies": {
-    "@types/node": "^14.18.63",
-    "@types/suncalc": "^1.9.2",
-    "typescript": "^4.0.0"
   },
   "dependencies": {
     "pick-port": "^2.1.0",
-    "suncalc": "^1.9.0"
+    "suncalc": "^1.9.0",
+    "typescript": "^4.0.0",
+    "@types/node": "^14.18.63",
+    "@types/suncalc": "^1.9.2"
   }
 }
