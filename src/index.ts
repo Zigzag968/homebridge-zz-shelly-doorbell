@@ -312,7 +312,7 @@ class ShellyDoorbellAccessory {
     }
 
     this.cameraController = undefined;
-    this.accessory.category = hap.Categories.VIDEO_DOORBELL;
+    this.accessory.category = hap.Categories.DOOR_LOCK;
     this.platform.log.info(`Module caméra désactivé pour ${this.config.host} (aucun flux configuré).`);
   }
 
