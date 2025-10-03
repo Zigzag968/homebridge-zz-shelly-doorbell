@@ -227,9 +227,18 @@ class ShellyDoorbellAccessory {
       .onSet(this.handleLockTargetState.bind(this))
       .onGet(this.getLockCurrentState.bind(this));
 
-    this.setupCameraController();
+    if (this.hasConfiguredStream()) {
+      this.setupCameraController();
+    } else {
+      this.disableCameraController();
+    }
 
     this.platform.log.info(`ShellyDoorbellAccessory créé pour ${config.host}`);
+  }
+
+  private hasConfiguredStream(): boolean {
+    const url = this.config.streamUrl;
+    return typeof url === 'string' && url.trim().length > 0;
   }
 
   private setupCameraController() {
@@ -283,6 +292,28 @@ class ShellyDoorbellAccessory {
     // On peut aussi définir la catégorie de l'accessoire comme CAMÉRA
     this.accessory.category = hap.Categories.CAMERA;
     this.platform.log.info('CameraController configuré pour', this.config.host);
+  }
+
+  private disableCameraController(): void {
+    const { hap } = this.platform.api;
+    const accessoryWithCamera = this.accessory as unknown as {
+      removeController: (controller: CameraController) => void;
+      activeCameraController?: CameraController;
+    };
+
+    const existingCamera = accessoryWithCamera.activeCameraController;
+    if (existingCamera) {
+      try {
+        accessoryWithCamera.removeController(existingCamera);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.platform.log.debug(`Impossible de retirer le module caméra existant pour ${this.config.host} : ${message}`);
+      }
+    }
+
+    this.cameraController = undefined;
+    this.accessory.category = hap.Categories.VIDEO_DOORBELL;
+    this.platform.log.info(`Module caméra désactivé pour ${this.config.host} (aucun flux configuré).`);
   }
 
   /**
