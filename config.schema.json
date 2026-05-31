@@ -7,10 +7,62 @@
     "type": "object",
     "properties": {
       "name": {
-        "title": "Name",
+        "title": "Nom de la plateforme",
         "type": "string",
         "required": true,
         "default": "Shelly Doorbell"
+      },
+      "host": {
+        "title": "Adresse IP du Shelly (mode mono-sonnette)",
+        "description": "IP locale du dispositif Shelly à utiliser quand un seul accessoire est configuré (sinon, utilisez le tableau `devices`).",
+        "type": "string"
+      },
+      "port": {
+        "title": "Port du serveur webhook",
+        "description": "Port d'écoute du serveur HTTP recevant les webhooks Shelly. Défaut : 8081.",
+        "type": "integer",
+        "default": 8081,
+        "minimum": 1,
+        "maximum": 65535
+      },
+      "streamUrl": {
+        "title": "URL du flux vidéo (optionnel)",
+        "description": "URL RTSP/HLS/HTTP du flux caméra à exposer dans HomeKit. Laisser vide pour ne pas activer la caméra (ou activer la caméra de démonstration ci-dessous).",
+        "type": "string"
+      },
+      "useFakeStreamWhenNoUrl": {
+        "title": "Activer la caméra de démonstration sans URL personnalisée",
+        "description": "Si activé et qu'aucune `streamUrl` n'est fournie, la sonnette expose dans HomeKit un flux de démonstration tournant en boucle (mp4 jour/nuit). Utile pour valider le pipeline HomeKit sans caméra IP réelle.",
+        "type": "boolean",
+        "default": false
+      },
+      "devices": {
+        "title": "Dispositifs (mode multi-sonnettes)",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "title": "Nom de la sonnette",
+              "type": "string"
+            },
+            "host": {
+              "title": "Adresse IP du Shelly",
+              "type": "string",
+              "required": true
+            },
+            "streamUrl": {
+              "title": "URL du flux vidéo (optionnel)",
+              "type": "string"
+            },
+            "useFakeStreamWhenNoUrl": {
+              "title": "Activer la caméra de démonstration sans URL personnalisée",
+              "description": "Si activé et qu'aucune `streamUrl` n'est fournie, la sonnette expose dans HomeKit un flux de démonstration tournant en boucle (mp4 jour/nuit). Utile pour valider le pipeline HomeKit sans caméra IP réelle.",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
       }
     }
   }

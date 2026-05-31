@@ -26,8 +26,11 @@ import { CustomStreamFfmpegDelegate, FakeStreamFfmpegDelegate, FakeStreamConfig,
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-const fakeStreamDayPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream_day.mp4"// path.join(__dirname, 'media', 'fakeStream_day.mp4');
-const fakeStreamNightPath = "/var/lib/homebridge/node_modules/homebridge-zz-shelly-doorbell/dist/media/fakeStream_night.mp4"// path.join(__dirname, 'media', 'fakeStream_night.mp4');
+// Les médias sont copiés dans dist/media/ par le script `move-media` du package.json.
+// __dirname pointe sur le répertoire dist/ une fois compilé : on résout les chemins relativement à lui
+// pour éviter de dépendre d'un chemin d'installation Homebridge absolu (qui varie selon les setups).
+const fakeStreamDayPath = path.join(__dirname, 'media', 'fakeStream_day.mp4');
+const fakeStreamNightPath = path.join(__dirname, 'media', 'fakeStream_night.mp4');
 
 let hap: HAP;
 
@@ -238,7 +241,9 @@ class ShellyDoorbellAccessory {
 
   private hasConfiguredStream(): boolean {
     const url = this.config.streamUrl;
-    return typeof url === 'string' && url.trim().length > 0;
+    const hasRealStream = typeof url === 'string' && url.trim().length > 0;
+    const useFakeFallback = this.config.useFakeStreamWhenNoUrl === true;
+    return hasRealStream || useFakeFallback;
   }
 
   private setupCameraController() {
@@ -247,7 +252,9 @@ class ShellyDoorbellAccessory {
 
     let ffmpegDelegate;
 
-    if (this.config.streamUrl) {
+    const hasRealStream = typeof this.config.streamUrl === 'string' && this.config.streamUrl.trim().length > 0;
+
+    if (hasRealStream) {
       ffmpegDelegate = new CustomStreamFfmpegDelegate(
       this.platform.log,
       this.config.streamUrl,
@@ -262,7 +269,7 @@ class ShellyDoorbellAccessory {
       this.accessory.displayName,
       hap,
       );
-      this.platform.log.info(`Utilisation du flux fake pour ${this.config.host}`);
+      this.platform.log.info(`Utilisation du flux de démonstration pour ${this.config.host} (aucune streamUrl fournie, useFakeStreamWhenNoUrl=true)`);
     }
 
     const cameraControllerOptions: CameraControllerOptions = {
