@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p ./ && npm run move-media",
+    "lint": "tsc -p ./ --noEmit",
     "prepublishOnly": "npm run build",
     "move-media": "if [ -d ./media ]; then mv ./media ./dist/media; fi",
     "postinstall": "npm run build && npm run move-media"
