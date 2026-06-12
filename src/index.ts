@@ -82,13 +82,17 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
 
   /**
    * Découverte des dispositifs définis dans la configuration.
-   * La config peut être soit un objet unique, soit contenir un tableau "devices".
+   *
+   * Forme OFFICIELLE : un tableau `devices`, chaque entrée décrivant une sonnette
+   * (`host` + `streamUrl` + `crop` + `maxStreams`…). C'est la forme à utiliser.
+   *
+   * Forme HISTORIQUE « mono » : les champs du device posés directement à la racine
+   * de la plateforme, sans tableau `devices`. Conservée uniquement pour la
+   * rétro-compatibilité — voir {@link resolveDeviceConfigs} pour le détail et la
+   * raison pour laquelle migrer une config mono vers `devices[]` est sans risque.
    */
-// Dans la classe ShellyDoorbellPlatform
 discoverDevices(): void {
-  const devices = Array.isArray(this.config.devices) 
-    ? this.config.devices 
-    : [this.config];
+  const devices = this.resolveDeviceConfigs();
 
   for (const deviceConfig of devices) {
     if (!deviceConfig.host) {
@@ -120,6 +124,50 @@ discoverDevices(): void {
     }
   }
 }
+
+  /**
+   * Normalise la configuration vers la forme `devices[]` (liste de dispositifs).
+   *
+   * ⚠️ COUCHE DE COMPATIBILITÉ — NE PAS SUPPRIMER sans plan de migration.
+   *
+   * Avant l'introduction de `devices[]`, une sonnette se configurait avec ses champs
+   * (`host`, `streamUrl`, …) directement à la racine de la plateforme (« mode mono »).
+   * On enveloppe alors cette config racine dans un tableau à un seul élément pour que
+   * le reste du code ne connaisse qu'une seule forme.
+   *
+   * Pourquoi migrer une config mono → `devices[]` est SANS RISQUE pour HomeKit :
+   * l'identité d'un accessoire est son UUID, dérivé du `host`
+   * (`api.hap.uuid.generate(deviceConfig.host)`), et NON de la forme de la config.
+   * Tant que le `host` reste identique, l'UUID est identique → même accessoire,
+   * aucun re-pairing, pièce et automatisations conservées.
+   *
+   * Conséquence inverse — pourquoi la dépréciation est « douce » (warning, pas suppression) :
+   * si on retirait ce fallback, une config encore en mode mono ne produirait plus aucun
+   * device → l'accessoire ne serait plus publié → il disparaîtrait de HomeKit (perte de la
+   * pièce et des automatisations). Ce n'est pas un changement d'identité, mais une absence
+   * de publication. On garde donc le fallback et on se contente d'inviter à migrer.
+   *
+   * INVARIANT CRITIQUE : ne jamais changer la graine de l'UUID (`host`). Générer l'UUID
+   * depuis autre chose (ex. `name`) ferait re-pairer TOUS les accessoires existants.
+   */
+  private resolveDeviceConfigs(): any[] {
+    if (Array.isArray(this.config.devices)) {
+      return this.config.devices;
+    }
+
+    // Compat « mono » (dépréciée) : on ne prévient que s'il y a réellement une sonnette
+    // configurée à la racine ; sinon l'absence de `host` est gérée plus bas comme une erreur.
+    if (this.config.host) {
+      this.log.warn(
+        'Config « mono » dépréciée : déclarez votre sonnette dans le tableau '
+        + '"devices": [ { "host": "…", "streamUrl": "…" } ]. La forme actuelle reste '
+        + 'supportée (rétro-compatibilité) et votre accessoire HomeKit est préservé '
+        + '(son identité dépend du "host", pas de la forme de config) — aucune action urgente.',
+      );
+    }
+
+    return [this.config];
+  }
 
   /**
    * Listener des requêtes HTTP entrantes (webhooks).

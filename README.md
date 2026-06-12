@@ -29,28 +29,31 @@ sudo npm install -g homebridge-zz-shelly-doorbell
 
 ## Configuration
 
-Example `config.json` block:
+**Recommended form — `devices[]`** (one entry per doorbell, scales to several):
 ```json
 {
   "platforms": [
     {
       "platform": "ShellyDoorbell",
-      "name": "Home Doorbell",
-      "homebridgeIp": "192.168.1.50",
-      "digitalDoorbellWebhookPort": 9053,
-      "doorbells": [
+      "name": "Doorbell",
+      "port": 8081,
+      "devices": [
         {
-          "shellyIP": "192.168.1.51",
-          "shellyUsername": "admin",
-          "shellyPassword": "password",
-          "digitalDoorbellName": "Front Doorbell",
-          "mechanicalDoorbellName": "Door Chime"
+          "name": "Front door",
+          "host": "192.168.1.23",
+          "streamUrl": "rtsp://user:pass@192.168.1.41:554/...",
+          "crop": { "x": 0, "y": 12, "width": 100, "height": 75 },
+          "maxStreams": 4
         }
       ]
     }
   ]
 }
 ```
+
+Each entry has its own `host` (the Shelly's IP), optional `streamUrl`, `crop` and `maxStreams`. Add more objects to `devices[]` for additional doorbells. `port` is the shared webhook server port (platform-level).
+
+> **Legacy "mono" form (deprecated):** older configs place the device fields (`host`, `streamUrl`, …) directly at the platform root, without a `devices` array. It still works (you'll get a deprecation warning in the log), and migrating to `devices[]` is **safe — it does not re-pair your accessory**: the HomeKit identity is derived from `host`, not from the config shape.
 
 ## Requirements
 
