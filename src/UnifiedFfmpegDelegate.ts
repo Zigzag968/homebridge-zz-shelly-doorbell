@@ -71,69 +71,10 @@ export class FakeStreamPath {
   }
 }
 
-//
-// Zone de recadrage (crop / bounding box) exprimée en pourcentages (0–100).
-//
-export interface CropRegion {
-  x: number;      // décalage depuis la gauche, en %
-  y: number;      // décalage depuis le haut, en %
-  width: number;  // largeur de la zone, en %
-  height: number; // hauteur de la zone, en %
-}
+// Le recadrage (crop) est désormais géré en amont par go2rtc (variante
+// `<cam>_hk`, déjà cropée). Le plugin reçoit un flux H.264 prêt pour HomeKit
+// et le recopie tel quel — voir CustomStreamFfmpegDelegate.startStream.
 
-/**
- * Construit un filtre FFmpeg "crop" à partir de pourcentages (0–100).
- *
- * Les expressions sont évaluées par FFmpeg en fonction de la résolution réelle
- * de la source (in_w / in_h), donc aucune résolution fixe n'est nécessaire :
- * la même config fonctionne quelle que soit la caméra.
- * Les dimensions sont arrondies à un nombre pair (requis par H.264 / yuv420p).
- *
- * Renvoie null si la configuration est absente ou invalide (le flux est alors
- * diffusé sans recadrage).
- */
-export function buildCropFilter(
-  crop: CropRegion | undefined,
-  log?: Logger,
-  cameraName = '',
-): string | null {
-  if (!crop) {
-    return null;
-  }
-
-  const values = [crop.x, crop.y, crop.width, crop.height];
-  if (values.some((n) => typeof n !== 'number' || Number.isNaN(n))) {
-    log?.warn(`[${cameraName}] crop ignoré : x, y, width et height doivent être des nombres (en %).`);
-    return null;
-  }
-
-  // Borne chaque valeur dans [0, 100].
-  let x = Math.min(Math.max(crop.x, 0), 100);
-  let y = Math.min(Math.max(crop.y, 0), 100);
-  let width = Math.min(Math.max(crop.width, 0), 100);
-  let height = Math.min(Math.max(crop.height, 0), 100);
-
-  if (width <= 0 || height <= 0) {
-    log?.warn(`[${cameraName}] crop ignoré : width et height doivent être > 0.`);
-    return null;
-  }
-
-  // Garde la zone à l'intérieur de l'image.
-  if (x + width > 100) {
-    width = 100 - x;
-  }
-  if (y + height > 100) {
-    height = 100 - y;
-  }
-
-  // Expressions évaluées par FFmpeg ; /2*2 force des dimensions paires.
-  const w = `floor(in_w*${width}/100/2)*2`;
-  const h = `floor(in_h*${height}/100/2)*2`;
-  const px = `floor(in_w*${x}/100)`;
-  const py = `floor(in_h*${y}/100)`;
-  log?.info(`[${cameraName}] crop appliqué : x=${x}% y=${y}% w=${width}% h=${height}%`);
-  return `crop=${w}:${h}:${px}:${py}`;
-}
 //
 // Delegate utilisant FFmpeg pour générer un snapshot et un flux vidéo continu
 //
@@ -348,17 +289,13 @@ export class FakeStreamFfmpegDelegate implements CameraStreamingDelegate {
 export class CustomStreamFfmpegDelegate implements CameraStreamingDelegate {
   private pendingSessions: Map<string, SessionInfo> = new Map();
   private ongoingSessions: Map<string, ActiveSession> = new Map();
-  private readonly cropFilter: string | null;
 
   constructor(
     private readonly log: Logger,
     private readonly customStreamUrl: string,
     private readonly cameraName: string,
     private readonly hap: HAP,
-    crop?: CropRegion,
-  ) {
-    this.cropFilter = buildCropFilter(crop, this.log, this.cameraName);
-  }
+  ) {}
 
   async prepareStream(request: PrepareStreamRequest, callback: PrepareStreamCallback): Promise<void> {
     this.log.info(`[${this.cameraName}] prepareStream: sessionID = ${request.sessionID}`);
@@ -419,10 +356,8 @@ export class CustomStreamFfmpegDelegate implements CameraStreamingDelegate {
 
   handleSnapshotRequest(request: any, callback: (error: Error | undefined, snapshot?: Buffer) => void): void {
     this.log.info(`[${this.cameraName}] handleSnapshotRequest: lancement du snapshot via FFmpeg`);
-    // On recadre (si configuré) avant de mettre à l'échelle.
-    const vf = this.cropFilter
-      ? `${this.cropFilter},scale=1920:1080:force_original_aspect_ratio=decrease`
-      : `scale=1920:1080:force_original_aspect_ratio=decrease`;
+    // Mise à l'échelle pour le snapshot HomeKit (le crop est déjà appliqué par go2rtc).
+    const vf = `scale=1920:1080:force_original_aspect_ratio=decrease`;
     // -rtsp_transport tcp : évite les images corrompues sur les flux RTSP/HEVC en UDP.
     const ffmpegArgs = `-rtsp_transport tcp -i ${this.customStreamUrl} -frames:v 1 -vf ${vf} -f mjpeg -hide_banner -loglevel error -`;
     this.log.info(`[${this.cameraName}] FFmpeg snapshot command: ffmpeg ${ffmpegArgs}`);
@@ -478,31 +413,23 @@ export class CustomStreamFfmpegDelegate implements CameraStreamingDelegate {
     this.log.info(`[${this.cameraName}] startStream: lancement du flux pour sessionID = ${request.sessionID}`);
 
     const mtu = 1316;
-    const fps = request.video.fps;
-    const videoBitrate = request.video.max_bit_rate;
 
+    // La source est le restream go2rtc (`<cam>_hk`) : déjà H.264 normalisé pour
+    // HomeKit (profil / résolution / crop gérés par go2rtc). On RECOPIE le flux
+    // tel quel (`-c:v copy`) : aucun ré-encodage → CPU quasi nul par session.
+    // N viewers HomeKit = N recopies + 1 seul transcodage partagé côté go2rtc
+    // (au lieu de N encodages libx264 dans l'ancien design).
     const ffmpegArgsArray = [
-      // --- Entrée RTSP en faible latence ---
-      // PAS de "-re" : la source est déjà temps réel ; "-re" ne sert qu'à rejouer
-      // un fichier et introduirait une latence croissante sur un flux live.
+      // --- Entrée RTSP en faible latence (PAS de "-re" sur un flux live) ---
       '-rtsp_transport', 'tcp',
       '-fflags', 'nobuffer',      // ne pas accumuler de paquets en entrée
-      '-flags', 'low_delay',      // décodage sans réordonnancement
-      '-reorder_queue_size', '0', // pas de file de réordonnancement RTP (TCP = déjà ordonné)
+      '-flags', 'low_delay',
+      '-reorder_queue_size', '0', // TCP déjà ordonné
       '-i', this.customStreamUrl,
       '-loglevel', 'error',
       '-an', '-sn', '-dn',
-      ...(this.cropFilter ? ['-vf', this.cropFilter] : []),
-      // --- Encodage H.264 sans latence ---
-      '-codec:v', 'libx264',
-      '-preset', 'ultrafast',     // encodage le plus rapide (moins de CPU, idéal multi-flux)
-      '-tune', 'zerolatency',     // pas de B-frames ni de lookahead
-      '-pix_fmt', 'yuv420p',
-      '-bf', '0',                 // aucune B-frame (pas de réordonnancement)
-      '-r', `${fps}`,
-      '-b:v', `${videoBitrate}k`,
-      '-maxrate', `${videoBitrate}k`,
-      '-bufsize', `${Math.max(1, Math.round(videoBitrate / 2))}k`, // petit VBV = faible latence
+      // --- Passthrough : aucun ré-encodage ---
+      '-c:v', 'copy',
       '-muxdelay', '0',           // pas de délai au muxer RTP
       '-f', 'rtp',
       '-payload_type', '99',
