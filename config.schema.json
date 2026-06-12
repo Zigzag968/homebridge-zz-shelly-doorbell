@@ -13,8 +13,8 @@
         "default": "Shelly Doorbell"
       },
       "host": {
-        "title": "Adresse IP du Shelly (mode mono-sonnette)",
-        "description": "IP locale du dispositif Shelly à utiliser quand un seul accessoire est configuré (sinon, utilisez le tableau `devices`).",
+        "title": "Adresse IP du Shelly (mode mono — déprécié)",
+        "description": "Mode historique : un seul accessoire configuré à la racine. Déprécié — préférez le tableau `devices` ci-dessous (rétro-compatible, ne re-paire pas l'accessoire car son identité dépend du host).",
         "type": "string"
       },
       "port": {
