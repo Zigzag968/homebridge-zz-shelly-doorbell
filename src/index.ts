@@ -260,6 +260,7 @@ class ShellyDoorbellAccessory {
       this.config.streamUrl,
       this.accessory.displayName,
       hap,
+      this.config.crop,
       );
       this.platform.log.info(`Utilisation du flux personnalisé pour ${this.config.host}`);
     } else {
@@ -272,7 +273,13 @@ class ShellyDoorbellAccessory {
       this.platform.log.info(`Utilisation du flux de démonstration pour ${this.config.host} (aucune streamUrl fournie, useFakeStreamWhenNoUrl=true)`);
     }
 
+    // Nombre de flux live simultanés autorisés (Apple TV, iPhone, iPad…).
+    // HomeKit limite à 1 par défaut. On borne entre 1 et 4 (au-delà, la charge
+    // CPU FFmpeg et les limites RTSP de la caméra deviennent problématiques).
+    const maxStreams = Math.min(Math.max(Number(this.config.maxStreams) || 3, 1), 4);
+
     const cameraControllerOptions: CameraControllerOptions = {
+      cameraStreamCount: maxStreams,
       delegate: ffmpegDelegate,
       streamingOptions: {
         supportedCryptoSuites: [0],
@@ -295,6 +302,7 @@ class ShellyDoorbellAccessory {
 
     this.cameraController = new hap.CameraController(cameraControllerOptions);
     this.accessory.configureController(this.cameraController);
+    this.platform.log.info(`Flux live simultanés autorisés pour ${this.config.host} : ${maxStreams}`);
 
     // On peut aussi définir la catégorie de l'accessoire comme CAMÉRA
     this.accessory.category = hap.Categories.CAMERA;
