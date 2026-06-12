@@ -12,51 +12,17 @@
         "required": true,
         "default": "Shelly Doorbell"
       },
-      "host": {
-        "title": "Adresse IP du Shelly (mode mono — déprécié)",
-        "description": "Mode historique : un seul accessoire configuré à la racine. Déprécié — préférez le tableau `devices` ci-dessous (rétro-compatible, ne re-paire pas l'accessoire car son identité dépend du host).",
-        "type": "string"
-      },
       "port": {
         "title": "Port du serveur webhook",
-        "description": "Port d'écoute du serveur HTTP recevant les webhooks Shelly. Défaut : 8081.",
+        "description": "Port d'écoute du serveur HTTP recevant les webhooks Shelly (partagé par toutes les sonnettes). Défaut : 8081.",
         "type": "integer",
         "default": 8081,
         "minimum": 1,
         "maximum": 65535
       },
-      "streamUrl": {
-        "title": "URL du flux vidéo (optionnel)",
-        "description": "URL RTSP/HLS/HTTP du flux caméra à exposer dans HomeKit. Laisser vide pour ne pas activer la caméra (ou activer la caméra de démonstration ci-dessous).",
-        "type": "string"
-      },
-      "useFakeStreamWhenNoUrl": {
-        "title": "Activer la caméra de démonstration sans URL personnalisée",
-        "description": "Si activé et qu'aucune `streamUrl` n'est fournie, la sonnette expose dans HomeKit un flux de démonstration tournant en boucle (mp4 jour/nuit). Utile pour valider le pipeline HomeKit sans caméra IP réelle.",
-        "type": "boolean",
-        "default": false
-      },
-      "maxStreams": {
-        "title": "Flux live simultanés",
-        "description": "Nombre de consultations live en parallèle (Apple TV, iPhone, iPad…). Chaque flux = un encodage FFmpeg. Défaut : 3.",
-        "type": "integer",
-        "default": 3,
-        "minimum": 1,
-        "maximum": 4
-      },
-      "crop": {
-        "title": "Recadrage de la zone vidéo (en %)",
-        "description": "N'affiche qu'une partie du flux (ex. juste l'entrée). Toutes les valeurs sont des POURCENTAGES (0–100) de l'image source, pas des pixels — la même config marche quelle que soit la résolution. Les 4 champs vont ensemble. Laisser vide = pas de recadrage. Exemple : X=33, Y=13, Largeur=55, Hauteur=75.",
-        "type": "object",
-        "properties": {
-          "x": { "title": "X — distance depuis le bord GAUCHE (%)", "description": "0 = collé à gauche, 50 = au milieu. En % de la largeur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 33" },
-          "y": { "title": "Y — distance depuis le bord HAUT (%)", "description": "0 = collé en haut, 50 = au milieu. En % de la hauteur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 13" },
-          "width": { "title": "Largeur de la zone (%)", "description": "Largeur du cadre, en % de la largeur de l'image (100 = toute la largeur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 55" },
-          "height": { "title": "Hauteur de la zone (%)", "description": "Hauteur du cadre, en % de la hauteur de l'image (100 = toute la hauteur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 75" }
-        }
-      },
       "devices": {
-        "title": "Dispositifs (mode multi-sonnettes)",
+        "title": "Sonnettes",
+        "description": "Liste des sonnettes Shelly. Ajoutez une entrée par sonnette (chacune avec son Shelly et, en option, sa caméra).",
         "type": "array",
         "items": {
           "type": "object",
@@ -67,11 +33,13 @@
             },
             "host": {
               "title": "Adresse IP du Shelly",
+              "description": "IP locale du dispositif Shelly (ex. 192.168.1.23). Sert aussi d'identifiant de l'accessoire dans HomeKit.",
               "type": "string",
               "required": true
             },
             "streamUrl": {
               "title": "URL du flux vidéo (optionnel)",
+              "description": "URL RTSP/HLS/HTTP du flux caméra à exposer dans HomeKit. Laisser vide pour ne pas activer la caméra (ou activer la caméra de démonstration ci-dessous).",
               "type": "string"
             },
             "useFakeStreamWhenNoUrl": {
@@ -82,7 +50,7 @@
             },
             "maxStreams": {
               "title": "Flux live simultanés",
-              "description": "Nombre de consultations live en parallèle. Chaque flux = un encodage FFmpeg. Défaut : 3.",
+              "description": "Nombre de consultations live en parallèle (Apple TV, iPhone, iPad…). Chaque flux = un encodage FFmpeg. Défaut : 3.",
               "type": "integer",
               "default": 3,
               "minimum": 1,
@@ -90,13 +58,13 @@
             },
             "crop": {
               "title": "Recadrage de la zone vidéo (en %)",
-              "description": "N'affiche qu'une partie du flux. Valeurs en POURCENTAGES (0–100) de l'image, pas des pixels. Les 4 champs vont ensemble. Exemple : X=33, Y=13, Largeur=55, Hauteur=75.",
+              "description": "N'affiche qu'une partie du flux (ex. juste l'entrée). Toutes les valeurs sont des POURCENTAGES (0–100) de l'image source, pas des pixels — la même config marche quelle que soit la résolution. Les 4 champs vont ensemble. Laisser vide = pas de recadrage. Exemple : X=33, Y=13, Largeur=55, Hauteur=75.",
               "type": "object",
               "properties": {
-                "x": { "title": "X — distance depuis le bord GAUCHE (%)", "description": "En % de la largeur (0 = à gauche).", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 33" },
-                "y": { "title": "Y — distance depuis le bord HAUT (%)", "description": "En % de la hauteur (0 = en haut).", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 13" },
-                "width": { "title": "Largeur de la zone (%)", "description": "En % de la largeur de l'image.", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 55" },
-                "height": { "title": "Hauteur de la zone (%)", "description": "En % de la hauteur de l'image.", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 75" }
+                "x": { "title": "X — distance depuis le bord GAUCHE (%)", "description": "0 = collé à gauche, 50 = au milieu. En % de la largeur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 33" },
+                "y": { "title": "Y — distance depuis le bord HAUT (%)", "description": "0 = collé en haut, 50 = au milieu. En % de la hauteur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 13" },
+                "width": { "title": "Largeur de la zone (%)", "description": "Largeur du cadre, en % de la largeur de l'image (100 = toute la largeur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 55" },
+                "height": { "title": "Hauteur de la zone (%)", "description": "Hauteur du cadre, en % de la hauteur de l'image (100 = toute la hauteur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 75" }
               }
             }
           }
