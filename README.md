@@ -88,6 +88,36 @@ Enable it with the `useFakeStreamWhenNoUrl` toggle:
 
 The toggle defaults to `false`, so existing setups are unaffected. As soon as you provide a real `streamUrl`, that stream takes precedence and the fallback is ignored.
 
+## Camera crop & multiple streams
+
+When a real `streamUrl` is set, two extra options let you tailor the HomeKit camera:
+
+```json
+{
+  "platform": "ShellyDoorbell",
+  "name": "Doorbell",
+  "host": "192.168.1.23",
+  "streamUrl": "rtsp://user:pass@192.168.1.41:554/...",
+  "maxStreams": 4,
+  "crop": { "x": 33, "y": 13, "width": 55, "height": 75 }
+}
+```
+
+### `crop` — region of interest (in %)
+
+Keep only part of the feed (e.g. just the doorway). Values are **percentages (0–100)** of the source image, so the same config works at any resolution:
+
+- `x` / `y` — offset of the box's top-left corner, from the left / top edge.
+- `width` / `height` — size of the box.
+
+The crop is applied to both the live stream and snapshots. Dimensions are rounded to even numbers (required by H.264); a box that falls outside the image is clamped, and invalid values are ignored (the full frame is used). Omit `crop` to disable it.
+
+### `maxStreams` — simultaneous live viewers
+
+HomeKit allows only **1** concurrent live stream by default. Set `maxStreams` (1–4, default 3) to allow several viewers at once — e.g. two Apple TVs plus an iPhone and an iPad. Each live stream is a separate FFmpeg transcode, so mind the host CPU and your camera's max RTSP client count; using the camera's **substream** keeps the load low. Notification snapshots are computed once and shared, so they don't count against this limit.
+
+The live encoder is tuned for **low latency** (no input buffering, `ultrafast`/`zerolatency`, no B-frames), so the picture stays near real-time.
+
 ## License and Credits
 
 Licensed under the **Apache-2.0 License**.

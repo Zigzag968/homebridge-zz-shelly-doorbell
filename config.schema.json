@@ -36,6 +36,25 @@
         "type": "boolean",
         "default": false
       },
+      "maxStreams": {
+        "title": "Flux live simultanés",
+        "description": "Nombre de consultations live en parallèle (Apple TV, iPhone, iPad…). Chaque flux = un encodage FFmpeg. Défaut : 3.",
+        "type": "integer",
+        "default": 3,
+        "minimum": 1,
+        "maximum": 4
+      },
+      "crop": {
+        "title": "Recadrage (crop)",
+        "description": "Zone à conserver dans le flux, en pourcentages (0–100) de l'image source. Laisser vide pour ne pas recadrer.",
+        "type": "object",
+        "properties": {
+          "x": { "title": "X — décalage gauche (%)", "type": "number", "minimum": 0, "maximum": 100 },
+          "y": { "title": "Y — décalage haut (%)", "type": "number", "minimum": 0, "maximum": 100 },
+          "width": { "title": "Largeur (%)", "type": "number", "minimum": 1, "maximum": 100 },
+          "height": { "title": "Hauteur (%)", "type": "number", "minimum": 1, "maximum": 100 }
+        }
+      },
       "devices": {
         "title": "Dispositifs (mode multi-sonnettes)",
         "type": "array",
@@ -60,6 +79,25 @@
               "description": "Si activé et qu'aucune `streamUrl` n'est fournie, la sonnette expose dans HomeKit un flux de démonstration tournant en boucle (mp4 jour/nuit). Utile pour valider le pipeline HomeKit sans caméra IP réelle.",
               "type": "boolean",
               "default": false
+            },
+            "maxStreams": {
+              "title": "Flux live simultanés",
+              "description": "Nombre de consultations live en parallèle. Chaque flux = un encodage FFmpeg. Défaut : 3.",
+              "type": "integer",
+              "default": 3,
+              "minimum": 1,
+              "maximum": 4
+            },
+            "crop": {
+              "title": "Recadrage (crop)",
+              "description": "Zone à conserver dans le flux, en pourcentages (0–100) de l'image source.",
+              "type": "object",
+              "properties": {
+                "x": { "title": "X — décalage gauche (%)", "type": "number", "minimum": 0, "maximum": 100 },
+                "y": { "title": "Y — décalage haut (%)", "type": "number", "minimum": 0, "maximum": 100 },
+                "width": { "title": "Largeur (%)", "type": "number", "minimum": 1, "maximum": 100 },
+                "height": { "title": "Hauteur (%)", "type": "number", "minimum": 1, "maximum": 100 }
+              }
             }
           }
         }
