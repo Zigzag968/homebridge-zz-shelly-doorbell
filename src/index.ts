@@ -84,7 +84,7 @@ class ShellyDoorbellPlatform implements DynamicPlatformPlugin {
    * Découverte des dispositifs définis dans la configuration.
    *
    * Forme OFFICIELLE : un tableau `devices`, chaque entrée décrivant une sonnette
-   * (`host` + `streamUrl` + `crop` + `maxStreams`…). C'est la forme à utiliser.
+   * (`host` + `streamUrl` + `maxStreams`…). C'est la forme à utiliser.
    *
    * Forme HISTORIQUE « mono » : les champs du device posés directement à la racine
    * de la plateforme, sans tableau `devices`. Conservée uniquement pour la
@@ -308,7 +308,6 @@ class ShellyDoorbellAccessory {
       this.config.streamUrl,
       this.accessory.displayName,
       hap,
-      this.config.crop,
       );
       this.platform.log.info(`Utilisation du flux personnalisé pour ${this.config.host}`);
     } else {
@@ -322,9 +321,10 @@ class ShellyDoorbellAccessory {
     }
 
     // Nombre de flux live simultanés autorisés (Apple TV, iPhone, iPad…).
-    // HomeKit limite à 1 par défaut. On borne entre 1 et 4 (au-delà, la charge
-    // CPU FFmpeg et les limites RTSP de la caméra deviennent problématiques).
-    const maxStreams = Math.min(Math.max(Number(this.config.maxStreams) || 3, 1), 4);
+    // HomeKit limite à 1 par défaut. go2rtc protège la caméra (fan-out depuis 1
+    // seule connexion) et le plugin ne fait que recopier le flux (`-c:v copy`),
+    // donc on peut autoriser jusqu'à 6 sessions sans risque pour la cam.
+    const maxStreams = Math.min(Math.max(Number(this.config.maxStreams) || 3, 1), 6);
 
     const cameraControllerOptions: CameraControllerOptions = {
       cameraStreamCount: maxStreams,

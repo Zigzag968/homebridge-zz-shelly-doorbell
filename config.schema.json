@@ -39,7 +39,7 @@
             },
             "streamUrl": {
               "title": "URL du flux vidéo (optionnel)",
-              "description": "URL RTSP/HLS/HTTP du flux caméra à exposer dans HomeKit. Laisser vide pour ne pas activer la caméra (ou activer la caméra de démonstration ci-dessous).",
+              "description": "URL RTSP/HLS/HTTP du flux caméra à exposer dans HomeKit. Le flux est recopié tel quel (-c:v copy), il doit donc être en H.264. Recommandé : pointer vers un restream go2rtc (ex. rtsp://127.0.0.1:8554/<cam>_hk) qui ouvre 1 seule connexion caméra, normalise le codec et gère le crop. Laisser vide pour ne pas activer la caméra (ou activer la caméra de démonstration ci-dessous).",
               "type": "string"
             },
             "useFakeStreamWhenNoUrl": {
@@ -50,22 +50,11 @@
             },
             "maxStreams": {
               "title": "Flux live simultanés",
-              "description": "Nombre de consultations live en parallèle (Apple TV, iPhone, iPad…). Chaque flux = un encodage FFmpeg. Défaut : 3.",
+              "description": "Nombre de consultations live HomeKit en parallèle (Apple TV, iPhone, iPad…). go2rtc fournit déjà le flux H.264 et le plugin ne fait que le recopier (`-c:v copy`, CPU minime), donc plusieurs sessions sont sans risque pour la caméra. Le recadrage et la mise à l'échelle sont gérés en amont par go2rtc. Défaut : 3.",
               "type": "integer",
               "default": 3,
               "minimum": 1,
-              "maximum": 4
-            },
-            "crop": {
-              "title": "Recadrage de la zone vidéo (en %)",
-              "description": "N'affiche qu'une partie du flux (ex. juste l'entrée). Toutes les valeurs sont des POURCENTAGES (0–100) de l'image source, pas des pixels — la même config marche quelle que soit la résolution. Les 4 champs vont ensemble. Laisser vide = pas de recadrage. Exemple : X=33, Y=13, Largeur=55, Hauteur=75.",
-              "type": "object",
-              "properties": {
-                "x": { "title": "X — distance depuis le bord GAUCHE (%)", "description": "0 = collé à gauche, 50 = au milieu. En % de la largeur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 33" },
-                "y": { "title": "Y — distance depuis le bord HAUT (%)", "description": "0 = collé en haut, 50 = au milieu. En % de la hauteur.", "type": "number", "minimum": 0, "maximum": 100, "placeholder": "ex. 13" },
-                "width": { "title": "Largeur de la zone (%)", "description": "Largeur du cadre, en % de la largeur de l'image (100 = toute la largeur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 55" },
-                "height": { "title": "Hauteur de la zone (%)", "description": "Hauteur du cadre, en % de la hauteur de l'image (100 = toute la hauteur).", "type": "number", "minimum": 1, "maximum": 100, "placeholder": "ex. 75" }
-              }
+              "maximum": 6
             }
           }
         }

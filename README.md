@@ -41,9 +41,8 @@ sudo npm install -g homebridge-zz-shelly-doorbell
         {
           "name": "Front door",
           "host": "192.168.1.23",
-          "streamUrl": "rtsp://user:pass@192.168.1.41:554/...",
-          "crop": { "x": 0, "y": 12, "width": 100, "height": 75 },
-          "maxStreams": 4
+          "streamUrl": "rtsp://127.0.0.1:8554/front_hk",
+          "maxStreams": 5
         }
       ]
     }
@@ -51,7 +50,7 @@ sudo npm install -g homebridge-zz-shelly-doorbell
 }
 ```
 
-Each entry has its own `host` (the Shelly's IP), optional `streamUrl`, `crop` and `maxStreams`. Add more objects to `devices[]` for additional doorbells. `port` is the shared webhook server port (platform-level).
+Each entry has its own `host` (the Shelly's IP), optional `streamUrl` and `maxStreams`. Add more objects to `devices[]` for additional doorbells. `port` is the shared webhook server port (platform-level).
 
 > **Legacy "mono" form (deprecated):** older configs place the device fields (`host`, `streamUrl`, …) directly at the platform root, without a `devices` array. It still works (you'll get a deprecation warning in the log), and migrating to `devices[]` is **safe — it does not re-pair your accessory**: the HomeKit identity is derived from `host`, not from the config shape.
 
@@ -91,35 +90,27 @@ Enable it with the `useFakeStreamWhenNoUrl` toggle:
 
 The toggle defaults to `false`, so existing setups are unaffected. As soon as you provide a real `streamUrl`, that stream takes precedence and the fallback is ignored.
 
-## Camera crop & multiple streams
+## Camera source & multiple viewers
 
-When a real `streamUrl` is set, two extra options let you tailor the HomeKit camera:
+`streamUrl` is an RTSP/HLS/HTTP feed re-streamed to HomeKit. The plugin **copies the stream as-is** (`-c:v copy`, no re-encode), so the source must already be **H.264** at a HomeKit-friendly profile.
+
+> **Recommended: front a [go2rtc](https://github.com/AlexxIT/go2rtc) gateway.** Point `streamUrl` at a go2rtc restream (e.g. `rtsp://127.0.0.1:8554/front_hk`) instead of the camera directly. go2rtc opens **one** connection to the camera and fans it out, normalises the codec to H.264 and handles any cropping/scaling. The plugin then just copies that stream into HomeKit's SRTP — so each extra viewer costs almost no CPU (a copy, not an encode).
 
 ```json
 {
   "platform": "ShellyDoorbell",
   "name": "Doorbell",
   "host": "192.168.1.23",
-  "streamUrl": "rtsp://user:pass@192.168.1.41:554/...",
-  "maxStreams": 4,
-  "crop": { "x": 33, "y": 13, "width": 55, "height": 75 }
+  "streamUrl": "rtsp://127.0.0.1:8554/front_hk",
+  "maxStreams": 5
 }
 ```
 
-### `crop` — region of interest (in %)
-
-Keep only part of the feed (e.g. just the doorway). Values are **percentages (0–100)** of the source image, so the same config works at any resolution:
-
-- `x` / `y` — offset of the box's top-left corner, from the left / top edge.
-- `width` / `height` — size of the box.
-
-The crop is applied to both the live stream and snapshots. Dimensions are rounded to even numbers (required by H.264); a box that falls outside the image is clamped, and invalid values are ignored (the full frame is used). Omit `crop` to disable it.
-
 ### `maxStreams` — simultaneous live viewers
 
-HomeKit allows only **1** concurrent live stream by default. Set `maxStreams` (1–4, default 3) to allow several viewers at once — e.g. two Apple TVs plus an iPhone and an iPad. Each live stream is a separate FFmpeg transcode, so mind the host CPU and your camera's max RTSP client count; using the camera's **substream** keeps the load low. Notification snapshots are computed once and shared, so they don't count against this limit.
+HomeKit allows only **1** concurrent live stream by default. Set `maxStreams` (1–6, default 3) to allow several viewers at once — e.g. two Apple TVs plus an iPhone and an iPad. Because the plugin **copies** the stream (no per-viewer transcode) and a go2rtc front-end protects the camera with a single shared connection, extra viewers are cheap and safe for the camera. Notification snapshots are computed once and shared, so they don't count against this limit.
 
-The live encoder is tuned for **low latency** (no input buffering, `ultrafast`/`zerolatency`, no B-frames), so the picture stays near real-time.
+The input is read with low-latency flags (no buffering, no RTP reordering) and copied without re-encoding, so the picture stays near real-time and CPU stays minimal.
 
 ## License and Credits
 
