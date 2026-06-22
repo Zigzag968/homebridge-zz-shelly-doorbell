@@ -430,6 +430,7 @@ export class CustomStreamFfmpegDelegate implements CameraStreamingDelegate {
       '-an', '-sn', '-dn',
       // --- Passthrough : aucun ré-encodage ---
       '-c:v', 'copy',
+      '-bsf:v', 'dump_extra', // SPS/PPS in-band requis par HomeKit en -c:v copy (sinon live timeout)
       '-muxdelay', '0',           // pas de délai au muxer RTP
       '-f', 'rtp',
       '-payload_type', '99',
