@@ -125,3 +125,6 @@ web_modules/
 .pnp.*
 
 test/
+dist/*.test.js
+dist/*.test.js.map
+dist/*.test.d.ts

@@ -21,8 +21,9 @@ import {
 import * as http from 'http';
 import { URL } from 'url';
 import * as fs from 'fs';
-import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT } from './settings';
+import { PLUGIN_NAME, PLATFORM_NAME, DEFAULT_PORT, DEFAULT_DOORBELL_DEBOUNCE_MS } from './settings';
 import { CustomStreamFfmpegDelegate, FakeStreamFfmpegDelegate, FakeStreamConfig, FakeStreamPath } from './UnifiedFfmpegDelegate';
+import { DoorbellDebounce } from './doorbellDebounce';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
@@ -239,6 +240,7 @@ class ShellyDoorbellAccessory {
   // On maintient en interne l’état du bouton "Ouvrir la Porte"
   private currentOpenDoorState: boolean = false;
   private cameraController?: CameraController;
+  private readonly doorbellDebounce: DoorbellDebounce;
 
   constructor(
     private readonly platform: ShellyDoorbellPlatform,
@@ -246,6 +248,11 @@ class ShellyDoorbellAccessory {
     private readonly config: any,
   ) {
     const { Service, Characteristic } = this.platform.api.hap;
+
+    const debounceMs = Number.isFinite(Number(config.doorbellDebounceMs))
+      ? Number(config.doorbellDebounceMs)
+      : DEFAULT_DOORBELL_DEBOUNCE_MS;
+    this.doorbellDebounce = new DoorbellDebounce(debounceMs);
 
     // Accessory Information
     this.informationService = accessory.getService(Service.AccessoryInformation)
@@ -385,6 +392,10 @@ class ShellyDoorbellAccessory {
    */
   public triggerDoorbell(): void {
     const { Characteristic } = this.platform.api.hap;
+    if (!this.doorbellDebounce.shouldTrigger()) {
+      this.platform.log.info(`Ring ignoré pour ${this.config.host} (trop rapproché du précédent, anti-rebond actif)`);
+      return;
+    }
     this.platform.log.info(`Déclenchement de la sonnette pour ${this.config.host}`);
     this.doorbellService.updateCharacteristic(hap.Characteristic.ProgrammableSwitchEvent, hap.Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS);
   }
